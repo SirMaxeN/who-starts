@@ -1,9 +1,18 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import type { LayoutChangeEvent } from 'react-native';
+import type {
+  LayoutChangeEvent,
+  NativeSyntheticEvent,
+  NativeTouchEvent,
+} from 'react-native';
 import type { RoundMode, SurfaceSize, TouchPoint } from '../types/game';
 import { RoundModeStorage } from '../services/RoundModeStorage';
 import { getTouchSignature, pickWinner } from '../utils/game';
+import {
+  isInsideCenterZone,
+  mapChangedTouchIds,
+  mapTouches,
+} from '../utils/touches';
 
 const DEFAULT_MODE: RoundMode = 3000;
 
@@ -17,7 +26,10 @@ export function useWhoStartsGame() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [surfaceSize, setSurfaceSize] = useState<SurfaceSize>({ width: 0, height: 0 });
+  const [playerLabels, setPlayerLabels] = useState<Record<string, string>>({});
   const hasLoadedSettings = useRef(false);
+  const nextPlayerNumber = useRef(1);
+  const ignoredTouchIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let isMounted = true;
@@ -82,6 +94,28 @@ export function useWhoStartsGame() {
   }, [countdownDeadline]);
 
   useEffect(() => {
+    setPlayerLabels((currentLabels) => {
+      if (activeTouches.length === 0) {
+        nextPlayerNumber.current = 1;
+        return {};
+      }
+
+      const nextLabels = { ...currentLabels };
+      let hasChanges = false;
+
+      for (const touch of activeTouches) {
+        if (!nextLabels[touch.id]) {
+          nextLabels[touch.id] = `Player ${nextPlayerNumber.current}`;
+          nextPlayerNumber.current += 1;
+          hasChanges = true;
+        }
+      }
+
+      return hasChanges ? nextLabels : currentLabels;
+    });
+  }, [activeTouches]);
+
+  useEffect(() => {
     if (!awaitingRelease || activeTouches.length !== 0) {
       return;
     }
@@ -130,12 +164,73 @@ export function useWhoStartsGame() {
     setSurfaceSize({ width, height });
   }
 
+  function handleTouchEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    handleTouchEventInternal(event, false);
+  }
+
+  function handleTouchStartEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    handleTouchEventInternal(event, true);
+  }
+
+  function handleTouchEventInternal(
+    event: NativeSyntheticEvent<NativeTouchEvent>,
+    isTouchStart: boolean
+  ) {
+    const nextTouches = mapTouches(event);
+    const currentIds = new Set(nextTouches.map((touch) => touch.id));
+    const changedTouches = mapChangedTouchIds(event);
+    const knownIds = new Set([
+      ...activeTouches.map((touch) => touch.id),
+      ...ignoredTouchIds.current,
+    ]);
+
+    for (const touch of changedTouches) {
+      const isNewTouch = !knownIds.has(touch.id);
+      const isCenterTouch =
+        surfaceSize.width > 0 &&
+        surfaceSize.height > 0 &&
+        isInsideCenterZone(touch.x, touch.y, surfaceSize);
+
+      if (
+        isTouchStart &&
+        isNewTouch &&
+        isCenterTouch &&
+        roundMode === 'manual' &&
+        activeTouches.length >= 2 &&
+        !winner &&
+        !awaitingRelease
+      ) {
+        selectWinner(activeTouches);
+      }
+
+      if (
+        isNewTouch &&
+        isCenterTouch
+      ) {
+        ignoredTouchIds.current.add(touch.id);
+      }
+    }
+
+    for (const ignoredId of Array.from(ignoredTouchIds.current)) {
+      if (!currentIds.has(ignoredId)) {
+        ignoredTouchIds.current.delete(ignoredId);
+      }
+    }
+
+    setActiveTouches(
+      nextTouches.filter((touch) => !ignoredTouchIds.current.has(touch.id))
+    );
+  }
+
   return {
     activeTouches,
     awaitingRelease,
+    handleTouchEvent,
+    handleTouchStartEvent,
     handleSurfaceLayout,
     isHelpOpen,
     isSettingsOpen,
+    playerLabels,
     openHelp: () => setIsHelpOpen(true),
     openSettings: () => setIsSettingsOpen(true),
     closeHelp: () => setIsHelpOpen(false),

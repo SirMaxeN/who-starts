@@ -1,9 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RoundMode, TouchPoint } from '../types/game';
-import { getModeLabel } from '../utils/game';
+import { getModeLabel, getTouchColor } from '../utils/game';
+
+export const CENTER_PANEL_SIZE = 232;
+export const CENTER_PANEL_RADIUS = CENTER_PANEL_SIZE / 2;
 
 type CenterPanelProps = {
   activeTouches: TouchPoint[];
+  playerLabels: Record<string, string>;
   remainingMs: number | null;
   roundMode: RoundMode;
   onStartManualRound: () => void;
@@ -13,16 +17,20 @@ type CenterPanelProps = {
 export function CenterPanel({
   activeTouches,
   onStartManualRound,
+  playerLabels,
   remainingMs,
   roundMode,
   winner,
 }: CenterPanelProps) {
   function renderContent() {
     if (winner) {
+      const winnerColor = getTouchColor(winner.id);
+      const winnerLabel = playerLabels[winner.id] ?? 'Winner';
+
       return (
         <>
-          <Text style={styles.centerEyebrow}>Winner</Text>
-          <Text style={styles.centerValue}>1</Text>
+          <Text style={[styles.centerEyebrow, { color: winnerColor }]}>Winner</Text>
+          <Text style={[styles.centerValue, { color: winnerColor }]}>{winnerLabel}</Text>
           <Text style={styles.centerHint}>Release all fingers</Text>
         </>
       );
@@ -89,10 +97,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    width: 232,
-    minHeight: 232,
-    transform: [{ translateX: -116 }, { translateY: -116 }],
-    borderRadius: 116,
+    width: CENTER_PANEL_SIZE,
+    minHeight: CENTER_PANEL_SIZE,
+    transform: [
+      { translateX: -CENTER_PANEL_RADIUS },
+      { translateY: -CENTER_PANEL_RADIUS },
+    ],
+    borderRadius: CENTER_PANEL_RADIUS,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',

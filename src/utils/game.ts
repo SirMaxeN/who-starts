@@ -7,7 +7,7 @@ export function getModeLabel(mode: RoundMode) {
 
 export function getTouchSignature(touches: TouchPoint[]) {
   return touches
-    .map((touch) => `${touch.id}:${Math.round(touch.x)}:${Math.round(touch.y)}`)
+    .map((touch) => touch.id)
     .sort()
     .join('|');
 }
