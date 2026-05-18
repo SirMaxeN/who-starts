@@ -6,16 +6,20 @@ import { getTouchColor } from '../utils/game';
 type SelectionEffectsProps = {
   isChoosing: boolean;
   winner: TouchPoint | null;
+  winnerBurstKey: number;
 };
 
 const PARTICLE_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315];
 
-export function SelectionEffects({ isChoosing, winner }: SelectionEffectsProps) {
+export function SelectionEffects({
+  isChoosing,
+  winner,
+  winnerBurstKey,
+}: SelectionEffectsProps) {
   const charge = useRef(new Animated.Value(0)).current;
   const chargeSpin = useRef(new Animated.Value(0)).current;
   const burst = useRef(new Animated.Value(0)).current;
   const flash = useRef(new Animated.Value(0)).current;
-  const previousWinnerId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isChoosing) {
@@ -59,11 +63,15 @@ export function SelectionEffects({ isChoosing, winner }: SelectionEffectsProps) 
   }, [charge, chargeSpin, isChoosing]);
 
   useEffect(() => {
-    if (!winner || previousWinnerId.current === winner.id) {
+    burst.stopAnimation();
+    flash.stopAnimation();
+
+    if (!winner) {
+      burst.setValue(0);
+      flash.setValue(0);
       return;
     }
 
-    previousWinnerId.current = winner.id;
     burst.setValue(0);
     flash.setValue(0);
 
@@ -89,7 +97,12 @@ export function SelectionEffects({ isChoosing, winner }: SelectionEffectsProps) 
         }),
       ]),
     ]).start();
-  }, [burst, flash, winner]);
+
+    return () => {
+      burst.stopAnimation();
+      flash.stopAnimation();
+    };
+  }, [burst, flash, winner, winnerBurstKey]);
 
   const spin = chargeSpin.interpolate({
     inputRange: [0, 1],

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 const BASE_TRACK = require('../../assets/sounds/base.mp3');
@@ -37,8 +38,11 @@ export function useMusicController({
   const selectionStateRef = useRef(selectionState);
   const selectingCycleKindRef = useRef<'post' | 'pre'>('pre');
   const selectingStartedAtRef = useRef<number | null>(null);
+  const baseRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const fadeTimersRef = useRef<ReturnType<typeof setInterval>[]>([]);
   const transitionIdRef = useRef(0);
+  const isInteractionUnlockedRef = useRef(Platform.OS !== 'web');
+  const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
     hasTouchesRef.current = hasTouches;
@@ -48,6 +52,87 @@ export function useMusicController({
       selectingCycleKindRef.current = 'post';
     }
   }, [hasTouches, selectionState]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+
+    const unlockAudio = () => {
+      if (isInteractionUnlockedRef.current) {
+        if (
+          enabled &&
+          selectionStateRef.current === 'idle' &&
+          !isPlayerRunning(basePlayer) &&
+          !isPlayerRunning(selectingPlayer)
+        ) {
+          startBaseImmediately();
+        }
+
+        return;
+      }
+
+      isInteractionUnlockedRef.current = true;
+
+      if (!enabled) {
+        return;
+      }
+
+      if (isPlayerRunning(basePlayer) || isPlayerRunning(selectingPlayer)) {
+        return;
+      }
+
+      if (selectionStateRef.current === 'idle') {
+        startBaseImmediately();
+        return;
+      }
+
+      void transitionToSelecting();
+    };
+
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('mousedown', unlockAudio, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('mousedown', unlockAudio);
+    };
+  }, [basePlayer, enabled, selectingPlayer]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      const wasActive = appStateRef.current === 'active';
+      const isActive = nextAppState === 'active';
+      appStateRef.current = nextAppState;
+
+      if (wasActive && !isActive) {
+        clearBaseRetryTimers();
+        clearFadeTimers();
+        basePlayer.pause();
+        selectingPlayer.pause();
+        return;
+      }
+
+      if (!wasActive && isActive && enabled) {
+        if (Platform.OS === 'web' && !isInteractionUnlockedRef.current) {
+          return;
+        }
+
+        if (selectionStateRef.current === 'idle') {
+          void transitionToBase();
+          return;
+        }
+
+        void transitionToSelecting();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [basePlayer, enabled, selectingPlayer]);
 
   useEffect(() => {
     basePlayer.loop = true;
@@ -64,6 +149,7 @@ export function useMusicController({
     });
 
     return () => {
+      clearBaseRetryTimers();
       clearFadeTimers();
       basePlayer.pause();
       selectingPlayer.pause();
@@ -74,6 +160,7 @@ export function useMusicController({
 
   useEffect(() => {
     if (!enabled) {
+      clearBaseRetryTimers();
       clearFadeTimers();
       phaseRef.current = 'silent';
       selectingStartedAtRef.current = null;
@@ -81,6 +168,14 @@ export function useMusicController({
       selectingPlayer.pause();
       basePlayer.volume = 0;
       selectingPlayer.volume = 0;
+      return;
+    }
+
+    if (appStateRef.current !== 'active') {
+      return;
+    }
+
+    if (Platform.OS === 'web' && !isInteractionUnlockedRef.current) {
       return;
     }
 
@@ -152,6 +247,8 @@ export function useMusicController({
   async function transitionToSelecting() {
     if (
       !enabled ||
+      appStateRef.current !== 'active' ||
+      (Platform.OS === 'web' && !isInteractionUnlockedRef.current) ||
       phaseRef.current === 'selecting' ||
       phaseRef.current === 'fadingToSelecting'
     ) {
@@ -159,6 +256,7 @@ export function useMusicController({
     }
 
     clearFadeTimers();
+    clearBaseRetryTimers();
     phaseRef.current = 'fadingToSelecting';
     selectingStartedAtRef.current = Date.now();
     selectingCycleKindRef.current =
@@ -170,12 +268,8 @@ export function useMusicController({
       // Ignore seek failures and continue best-effort playback.
     });
 
-    if (!basePlayer.playing) {
-      basePlayer.play();
-    }
-    if (!selectingPlayer.playing) {
-      selectingPlayer.play();
-    }
+    playIfStopped(basePlayer);
+    playIfStopped(selectingPlayer);
 
     fadeVolume(basePlayer, 0, FADE_TO_SELECTING_BASE_OUT_MS);
     fadeVolume(
@@ -193,23 +287,25 @@ export function useMusicController({
   async function transitionToBase() {
     if (
       !enabled ||
-      phaseRef.current === 'base' ||
+      appStateRef.current !== 'active' ||
+      (Platform.OS === 'web' && !isInteractionUnlockedRef.current) ||
+      (phaseRef.current === 'base' && isPlayerRunning(basePlayer)) ||
       phaseRef.current === 'fadingToBase'
     ) {
       return;
     }
 
     clearFadeTimers();
+    clearBaseRetryTimers();
     phaseRef.current = 'fadingToBase';
     selectingStartedAtRef.current = null;
     transitionIdRef.current += 1;
     const transitionId = transitionIdRef.current;
 
-    if (!basePlayer.playing) {
-      basePlayer.play();
-    }
+    playIfStopped(basePlayer);
 
     basePlayer.loop = true;
+    scheduleBaseRetryStarts();
     fadeVolume(basePlayer, BASE_VOLUME, FADE_TO_BASE_BASE_IN_MS);
     fadeVolume(selectingPlayer, 0, FADE_TO_BASE_SELECTING_OUT_MS, () => {
       if (transitionIdRef.current !== transitionId) {
@@ -265,4 +361,106 @@ export function useMusicController({
 
     fadeTimersRef.current = [];
   }
+
+  function startBaseImmediately() {
+    clearBaseRetryTimers();
+    clearFadeTimers();
+    isInteractionUnlockedRef.current = true;
+    basePlayer.loop = true;
+    basePlayer.volume = BASE_VOLUME;
+    selectingPlayer.pause();
+    selectingPlayer.volume = 0;
+    phaseRef.current = 'fadingToBase';
+    playIfStopped(basePlayer);
+    markBasePhaseIfRunning();
+    scheduleBaseRetryStarts();
+  }
+
+  function scheduleBaseRetryStarts() {
+    if (Platform.OS !== 'web') {
+      return;
+    }
+
+    for (const delay of [80, 160, 420, 900, 1600, 2600]) {
+      const timer = setTimeout(() => {
+        baseRetryTimersRef.current = baseRetryTimersRef.current.filter(
+          (currentTimer) => currentTimer !== timer
+        );
+
+        if (markBasePhaseIfRunning()) {
+          return;
+        }
+
+        if (
+          !enabled ||
+          appStateRef.current !== 'active' ||
+          (phaseRef.current !== 'fadingToBase' && selectionStateRef.current !== 'idle') ||
+          phaseRef.current === 'selecting' ||
+          phaseRef.current === 'fadingToSelecting' ||
+          isPlayerRunning(basePlayer)
+        ) {
+          return;
+        }
+
+        basePlayer.loop = true;
+        basePlayer.volume = BASE_VOLUME;
+        playIfStopped(basePlayer);
+        markBasePhaseIfRunning();
+      }, delay);
+
+      baseRetryTimersRef.current.push(timer);
+    }
+  }
+
+  function clearBaseRetryTimers() {
+    for (const timer of baseRetryTimersRef.current) {
+      clearTimeout(timer);
+    }
+
+    baseRetryTimersRef.current = [];
+  }
+
+  function ensureBaseOnInteraction() {
+    if (
+      !enabled ||
+      Platform.OS !== 'web' ||
+      selectionStateRef.current !== 'idle' ||
+      isPlayerRunning(basePlayer) ||
+      isPlayerRunning(selectingPlayer)
+    ) {
+      return;
+    }
+
+    startBaseImmediately();
+  }
+
+  function isPlayerRunning(player: typeof basePlayer) {
+    if (Platform.OS !== 'web') {
+      return player.playing;
+    }
+
+    return player.currentStatus.playing || !player.paused;
+  }
+
+  function playIfStopped(player: typeof basePlayer) {
+    if (!isPlayerRunning(player)) {
+      player.play();
+    }
+  }
+
+  function markBasePhaseIfRunning() {
+    if (!isPlayerRunning(basePlayer)) {
+      return false;
+    }
+
+    if (phaseRef.current === 'fadingToBase' || phaseRef.current === 'silent') {
+      phaseRef.current = 'base';
+    }
+
+    return true;
+  }
+
+  return {
+    ensureBaseOnInteraction,
+  };
 }

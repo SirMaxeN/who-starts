@@ -26,6 +26,7 @@ export function useWhoStartsGame() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [activeTouches, setActiveTouches] = useState<TouchPoint[]>([]);
   const [winner, setWinner] = useState<TouchPoint | null>(null);
+  const [winnerBurstKey, setWinnerBurstKey] = useState(0);
   const [awaitingRelease, setAwaitingRelease] = useState(false);
   const [countdownDeadline, setCountdownDeadline] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
@@ -37,6 +38,9 @@ export function useWhoStartsGame() {
   const hasLoadedSettings = useRef(false);
   const nextPlayerNumber = useRef(1);
   const ignoredTouchIds = useRef<Set<string>>(new Set());
+  const activeTouchesRef = useRef<TouchPoint[]>([]);
+  const pendingTouchesRef = useRef<TouchPoint[] | null>(null);
+  const touchFrameRef = useRef<number | null>(null);
   const selectionState =
     winner !== null || awaitingRelease
       ? 'post'
@@ -44,7 +48,7 @@ export function useWhoStartsGame() {
         ? 'pre'
         : 'idle';
 
-  useMusicController({
+  const musicController = useMusicController({
     enabled: settings.music,
     hasTouches: activeTouches.length > 0,
     selectionState,
@@ -62,6 +66,18 @@ export function useWhoStartsGame() {
     roundMode,
     winnerId: winner?.id ?? null,
   });
+
+  useEffect(() => {
+    activeTouchesRef.current = activeTouches;
+  }, [activeTouches]);
+
+  useEffect(() => {
+    return () => {
+      if (touchFrameRef.current !== null) {
+        cancelAnimationFrame(touchFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -179,6 +195,7 @@ export function useWhoStartsGame() {
     }
 
     setWinner(nextWinner);
+    setWinnerBurstKey((current) => current + 1);
     setAwaitingRelease(true);
     setCountdownDeadline(null);
     setRemainingMs(null);
@@ -205,7 +222,11 @@ export function useWhoStartsGame() {
 
   function handleSurfaceLayout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
-    setSurfaceSize({ width, height });
+    setSurfaceSize((currentSize) =>
+      currentSize.width === width && currentSize.height === height
+        ? currentSize
+        : { width, height }
+    );
   }
 
   function handleTouchEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
@@ -219,6 +240,7 @@ export function useWhoStartsGame() {
 
   function registerTouchStart(event: NativeSyntheticEvent<NativeTouchEvent>) {
     const changedTouches = mapChangedTouchIds(event);
+    musicController.ensureBaseOnInteraction();
 
     for (const _touch of changedTouches) {
       soundEffects.playPress();
@@ -233,7 +255,7 @@ export function useWhoStartsGame() {
     const currentIds = new Set(nextTouches.map((touch) => touch.id));
     const changedTouches = mapChangedTouchIds(event);
     const knownIds = new Set([
-      ...activeTouches.map((touch) => touch.id),
+      ...activeTouchesRef.current.map((touch) => touch.id),
       ...ignoredTouchIds.current,
     ]);
 
@@ -253,16 +275,16 @@ export function useWhoStartsGame() {
         isNewTouch &&
         isCenterTouch &&
         roundMode === 'manual' &&
-        activeTouches.length >= 2 &&
+        activeTouchesRef.current.length >= 2 &&
         !winner &&
         !awaitingRelease
       ) {
-        selectWinner(activeTouches);
+        selectWinner(activeTouchesRef.current);
       }
 
       if (
         isNewTouch &&
-        (isCenterTouch || isTopControlTouch)
+        (isTopControlTouch || (roundMode === 'manual' && isCenterTouch))
       ) {
         ignoredTouchIds.current.add(touch.id);
       }
@@ -278,11 +300,31 @@ export function useWhoStartsGame() {
       (touch) => !ignoredTouchIds.current.has(touch.id)
     );
 
-    setActiveTouches((currentTouches) =>
-      areTouchesEqual(currentTouches, filteredTouches)
-        ? currentTouches
-        : filteredTouches
-    );
+    queueActiveTouches(filteredTouches);
+  }
+
+  function queueActiveTouches(nextTouches: TouchPoint[]) {
+    pendingTouchesRef.current = nextTouches;
+
+    if (touchFrameRef.current !== null) {
+      return;
+    }
+
+    touchFrameRef.current = requestAnimationFrame(() => {
+      touchFrameRef.current = null;
+      const pendingTouches = pendingTouchesRef.current;
+
+      if (!pendingTouches) {
+        return;
+      }
+
+      pendingTouchesRef.current = null;
+      setActiveTouches((currentTouches) =>
+        areTouchesEqual(currentTouches, pendingTouches)
+          ? currentTouches
+          : pendingTouches
+      );
+    });
   }
 
   return {
@@ -323,5 +365,6 @@ export function useWhoStartsGame() {
     surfaceSize,
     visibleTouches: winner ? [winner] : activeTouches,
     winner,
+    winnerBurstKey,
   };
 }

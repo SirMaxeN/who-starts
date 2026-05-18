@@ -1,5 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { CenterPanel } from '../components/CenterPanel';
 import { OverlayModal } from '../components/OverlayModal';
 import { SciFiBackdrop } from '../components/SciFiBackdrop';
@@ -9,8 +18,23 @@ import { TouchMarker } from '../components/TouchMarker';
 import { MODE_OPTIONS } from '../constants/game';
 import { useWhoStartsGame } from '../hooks/useWhoStartsGame';
 
+const APP_VERSION = require('../../app.json').expo.version as string;
+
 export function HomeScreen() {
+  const { height, width } = useWindowDimensions();
   const game = useWhoStartsGame();
+  const isCompactScreen = height < 760 || width < 390;
+  const isDesktopWeb = Platform.OS === 'web' && width >= 768;
+  const [isDesktopNoticeOpen, setIsDesktopNoticeOpen] = useState(isDesktopWeb);
+
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setIsDesktopNoticeOpen(true);
+      return;
+    }
+
+    setIsDesktopNoticeOpen(false);
+  }, [isDesktopWeb]);
   const handleManualStart = () => {
     game.selectWinner(game.activeTouches);
   };
@@ -38,6 +62,7 @@ export function HomeScreen() {
         <SciFiBackdrop animationsEnabled={game.settings.animations} />
         <SelectionEffects
           isChoosing={game.settings.animations && game.isChoosing}
+          winnerBurstKey={game.winnerBurstKey}
           winner={game.settings.animations ? game.winner : null}
         />
 
@@ -129,15 +154,23 @@ export function HomeScreen() {
         title="Settings"
       >
         <ScrollView
-          contentContainerStyle={styles.settingsContent}
+          contentContainerStyle={[
+            styles.settingsContent,
+            isCompactScreen && styles.settingsContentCompact,
+          ]}
           showsVerticalScrollIndicator={false}
+          style={styles.settingsScroll}
         >
-          <Text style={styles.sectionTitle}>Experience</Text>
+          <Text style={[styles.sectionTitle, isCompactScreen && styles.sectionTitleCompact]}>
+            Experience
+          </Text>
           <Pressable
             onPress={() => handleToggleSetting('sounds')}
-            style={styles.toggleRow}
+            style={[styles.toggleRow, isCompactScreen && styles.toggleRowCompact]}
           >
-            <Text style={styles.toggleLabel}>Sounds</Text>
+            <Text style={[styles.toggleLabel, isCompactScreen && styles.toggleLabelCompact]}>
+              Sounds
+            </Text>
             <View
               style={[
                 styles.togglePill,
@@ -154,9 +187,11 @@ export function HomeScreen() {
           </Pressable>
           <Pressable
             onPress={() => handleToggleSetting('music')}
-            style={styles.toggleRow}
+            style={[styles.toggleRow, isCompactScreen && styles.toggleRowCompact]}
           >
-            <Text style={styles.toggleLabel}>Music</Text>
+            <Text style={[styles.toggleLabel, isCompactScreen && styles.toggleLabelCompact]}>
+              Music
+            </Text>
             <View
               style={[
                 styles.togglePill,
@@ -173,9 +208,11 @@ export function HomeScreen() {
           </Pressable>
           <Pressable
             onPress={() => handleToggleSetting('animations')}
-            style={styles.toggleRow}
+            style={[styles.toggleRow, isCompactScreen && styles.toggleRowCompact]}
           >
-            <Text style={styles.toggleLabel}>Animations</Text>
+            <Text style={[styles.toggleLabel, isCompactScreen && styles.toggleLabelCompact]}>
+              Animations
+            </Text>
             <View
               style={[
                 styles.togglePill,
@@ -191,8 +228,10 @@ export function HomeScreen() {
             </View>
           </Pressable>
 
-          <Text style={styles.sectionTitle}>Round mode</Text>
-          <View style={styles.optionsGrid}>
+          <Text style={[styles.sectionTitle, isCompactScreen && styles.sectionTitleCompact]}>
+            Round mode
+          </Text>
+          <View style={[styles.optionsGrid, isCompactScreen && styles.optionsGridCompact]}>
             {MODE_OPTIONS.map((option) => {
               const isSelected = option.value === game.roundMode;
 
@@ -202,11 +241,16 @@ export function HomeScreen() {
                   onPress={() => {
                     handleSelectRoundMode(option.value);
                   }}
-                  style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                  style={[
+                    styles.optionButton,
+                    isCompactScreen && styles.optionButtonCompact,
+                    isSelected && styles.optionButtonSelected,
+                  ]}
                 >
                   <Text
                     style={[
                       styles.optionButtonText,
+                      isCompactScreen && styles.optionButtonTextCompact,
                       isSelected && styles.optionButtonTextSelected,
                     ]}
                   >
@@ -217,12 +261,40 @@ export function HomeScreen() {
             })}
           </View>
 
-          <Text style={styles.sectionTitle}>Help</Text>
-          <Text style={styles.modalText}>Put 2 or more fingers on the screen.</Text>
-          <Text style={styles.modalText}>In timed modes, adding or removing fingers restarts the countdown.</Text>
-          <Text style={styles.modalText}>In manual mode, press START when everyone is ready.</Text>
-          <Text style={styles.modalText}>One finger wins. Release all fingers to begin again.</Text>
+          <Text style={[styles.sectionTitle, isCompactScreen && styles.sectionTitleCompact]}>
+            Help
+          </Text>
+          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
+            Put 2 or more fingers on the screen.
+          </Text>
+          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
+            In timed modes, adding or removing fingers restarts the countdown.
+          </Text>
+          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
+            In manual mode, press START when everyone is ready.
+          </Text>
+          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
+            One finger wins. Release all fingers to begin again.
+          </Text>
+          <Text style={styles.creditText}>Created by SirMaxeN</Text>
+          <Text style={styles.versionText}>Version {APP_VERSION}</Text>
         </ScrollView>
+      </OverlayModal>
+
+      <OverlayModal
+        visible={isDesktopNoticeOpen}
+        onClose={() => setIsDesktopNoticeOpen(false)}
+        title="Best on phone"
+      >
+        <Text style={styles.modalText}>
+          WhoStarts? is designed mainly for mobile devices.
+        </Text>
+        <Text style={styles.modalText}>
+          The game works by placing multiple fingers on the screen at the same time, so desktop does not show the real experience.
+        </Text>
+        <Text style={styles.modalText}>
+          Open this page on a phone
+        </Text>
       </OverlayModal>
     </View>
   );
@@ -251,6 +323,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  modalTextCompact: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
   sectionTitle: {
     marginTop: 8,
     color: '#8FB3D8',
@@ -259,12 +335,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
+  sectionTitleCompact: {
+    marginTop: 4,
+    fontSize: 12,
+  },
   optionsGrid: {
     gap: 10,
+  },
+  optionsGridCompact: {
+    gap: 8,
+  },
+  settingsScroll: {
+    flexGrow: 0,
   },
   settingsContent: {
     gap: 12,
     paddingBottom: 8,
+  },
+  settingsContentCompact: {
+    gap: 10,
+    paddingBottom: 4,
   },
   optionButton: {
     paddingHorizontal: 16,
@@ -274,6 +364,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
+  optionButtonCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
   optionButtonSelected: {
     backgroundColor: 'rgba(0, 228, 255, 0.16)',
     borderColor: 'rgba(0, 228, 255, 0.42)',
@@ -282,6 +377,9 @@ const styles = StyleSheet.create({
     color: '#E6F4FF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  optionButtonTextCompact: {
+    fontSize: 15,
   },
   optionButtonTextSelected: {
     color: '#8AF4FF',
@@ -297,10 +395,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  toggleRowCompact: {
+    minHeight: 52,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
   toggleLabel: {
     color: '#E6F4FF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  toggleLabelCompact: {
+    fontSize: 15,
   },
   togglePill: {
     width: 52,
@@ -322,5 +428,19 @@ const styles = StyleSheet.create({
   toggleKnobActive: {
     backgroundColor: '#8AF4FF',
     alignSelf: 'flex-end',
+  },
+  creditText: {
+    marginTop: 10,
+    color: '#8AA3BF',
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textAlign: 'center',
+  },
+  versionText: {
+    marginTop: 4,
+    color: '#6D86A3',
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
 });

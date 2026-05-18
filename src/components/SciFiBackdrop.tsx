@@ -16,6 +16,8 @@ export function SciFiBackdrop({ animationsEnabled = true }: SciFiBackdropProps) 
 
   useEffect(() => {
     const animatedValues = [driftA, driftB, driftC, orbitA, orbitB, orbitC];
+    const runningAnimations: Animated.CompositeAnimation[] = [];
+    let isCancelled = false;
 
     for (const value of animatedValues) {
       value.stopAnimation();
@@ -26,61 +28,50 @@ export function SciFiBackdrop({ animationsEnabled = true }: SciFiBackdropProps) 
       return;
     }
 
-    Animated.loop(
-      Animated.timing(driftA, {
-        toValue: 1,
-        duration: 22000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    const startLoop = (value: Animated.Value, duration: number) => {
+      const run = () => {
+        if (isCancelled) {
+          return;
+        }
 
-    Animated.loop(
-      Animated.timing(driftB, {
-        toValue: 1,
-        duration: 28000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+        value.setValue(0);
+        const animation = Animated.timing(value, {
+          toValue: 1,
+          duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        });
 
-    Animated.loop(
-      Animated.timing(driftC, {
-        toValue: 1,
-        duration: 34000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+        runningAnimations.push(animation);
+        animation.start(({ finished }) => {
+          const animationIndex = runningAnimations.indexOf(animation);
+          if (animationIndex >= 0) {
+            runningAnimations.splice(animationIndex, 1);
+          }
 
-    Animated.loop(
-      Animated.timing(orbitA, {
-        toValue: 1,
-        duration: 26000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+          if (finished && !isCancelled) {
+            run();
+          }
+        });
+      };
 
-    Animated.loop(
-      Animated.timing(orbitB, {
-        toValue: 1,
-        duration: 34000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+      run();
+    };
 
-    Animated.loop(
-      Animated.timing(orbitC, {
-        toValue: 1,
-        duration: 42000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    startLoop(driftA, 22000);
+    startLoop(driftB, 28000);
+    startLoop(driftC, 34000);
+    startLoop(orbitA, 26000);
+    startLoop(orbitB, 34000);
+    startLoop(orbitC, 42000);
 
     return () => {
+      isCancelled = true;
+
+      for (const animation of runningAnimations) {
+        animation.stop();
+      }
+
       driftA.stopAnimation();
       driftB.stopAnimation();
       driftC.stopAnimation();

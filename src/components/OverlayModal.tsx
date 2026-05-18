@@ -37,22 +37,29 @@ export function OverlayModal({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
     justifyContent: 'center',
     backgroundColor: 'rgba(1, 4, 12, 0.74)',
   },
   modalCard: {
+    width: '100%',
+    maxHeight: '88%',
     borderRadius: 28,
-    padding: 22,
+    paddingTop: 20,
     backgroundColor: '#07111F',
     borderWidth: 1,
     borderColor: 'rgba(95, 230, 255, 0.28)',
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   modalTitle: {
     color: '#F6FDFF',
@@ -73,6 +80,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   modalBody: {
+    minHeight: 0,
+    flexShrink: 1,
     gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
   },
 });

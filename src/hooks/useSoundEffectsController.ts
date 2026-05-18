@@ -9,6 +9,7 @@ const PRESS_1_SOUND = require('../../assets/sounds/press1.mp3');
 const PRESS_2_SOUND = require('../../assets/sounds/press2.mp3');
 const PRESS_3_SOUND = require('../../assets/sounds/press3.mp3');
 const TIMER_SOUND = require('../../assets/sounds/timer.mp3');
+const PLAYER_POOL_SIZE = 6;
 const TIMER_POOL_SIZE = 6;
 
 const PRESS_VOLUMES = [0.55, 0.55, 0.55] as const;
@@ -18,7 +19,7 @@ const PLAYER_MAX_RATE = 1.55;
 const CHOSEN_VOLUME = 0.82;
 const MENU_VOLUME = 0.5;
 const PLAYER_VOLUME = 0.68;
-const TIMER_VOLUME = 0.42;
+const TIMER_VOLUME = 0.08;
 
 type SoundPlayer = ReturnType<typeof createAudioPlayer>;
 
@@ -42,7 +43,9 @@ export function useSoundEffectsController({
   const [timerPlayers] = useState(() =>
     Array.from({ length: TIMER_POOL_SIZE }, () => createAudioPlayer(TIMER_SOUND))
   );
-  const [playerJoinPlayer] = useState(() => createAudioPlayer(PLAYER_SOUND));
+  const [playerJoinPlayers] = useState(() =>
+    Array.from({ length: PLAYER_POOL_SIZE }, () => createAudioPlayer(PLAYER_SOUND))
+  );
   const [press1Player] = useState(() => createAudioPlayer(PRESS_1_SOUND));
   const [press2Player] = useState(() => createAudioPlayer(PRESS_2_SOUND));
   const [press3Player] = useState(() => createAudioPlayer(PRESS_3_SOUND));
@@ -53,13 +56,14 @@ export function useSoundEffectsController({
   const previousWinnerId = useRef<string | null>(winnerId);
   const previousRemainingMs = useRef<number | null>(remainingMs);
   const previousCountdownActive = useRef(countdownActive);
+  const playerPoolIndex = useRef(0);
   const pressIndex = useRef(0);
   const timerPoolIndex = useRef(0);
 
   useEffect(() => {
     const players = [
       ...timerPlayers,
-      playerJoinPlayer,
+      ...playerJoinPlayers,
       press1Player,
       press2Player,
       press3Player,
@@ -80,7 +84,7 @@ export function useSoundEffectsController({
   }, [
     chosenPlayer,
     menuPlayer,
-    playerJoinPlayer,
+    playerJoinPlayers,
     press1Player,
     press2Player,
     press3Player,
@@ -102,7 +106,7 @@ export function useSoundEffectsController({
         PLAYER_BASE_RATE + (playerCount - 1) * PLAYER_RATE_STEP
       );
 
-      replaySound(playerJoinPlayer, {
+      playPlayerJoin(playerJoinPlayers, playerPoolIndex, {
         playbackRate,
         shouldCorrectPitch: false,
         volume: PLAYER_VOLUME,
@@ -110,7 +114,7 @@ export function useSoundEffectsController({
     }
 
     previousPlayerCount.current = playerCount;
-  }, [enabled, playerCount, playerJoinPlayer]);
+  }, [enabled, playerCount, playerJoinPlayers]);
 
   useEffect(() => {
     if (!enabled) {
@@ -139,7 +143,10 @@ export function useSoundEffectsController({
     }
 
     const previousRemaining = previousCountdownActive.current ? previousRemainingMs.current : null;
-    const shouldPlayImmediateStartBeep = !previousCountdownActive.current;
+    const shouldPlayImmediateStartBeep =
+      !previousCountdownActive.current ||
+      previousRemaining === null ||
+      remainingMs > previousRemaining;
 
     if (shouldPlayImmediateStartBeep) {
       playTimerBeep(timerPlayers, timerPoolIndex);
@@ -187,6 +194,20 @@ function playTimerBeep(timerPlayers: SoundPlayer[], timerPoolIndex: { current: n
   const player = timerPlayers[timerPoolIndex.current % timerPlayers.length];
   timerPoolIndex.current = (timerPoolIndex.current + 1) % timerPlayers.length;
   replaySound(player, { volume: TIMER_VOLUME });
+}
+
+function playPlayerJoin(
+  playerJoinPlayers: SoundPlayer[],
+  playerPoolIndex: { current: number },
+  options: {
+    playbackRate?: number;
+    shouldCorrectPitch?: boolean;
+    volume?: number;
+  }
+) {
+  const player = playerJoinPlayers[playerPoolIndex.current % playerJoinPlayers.length];
+  playerPoolIndex.current = (playerPoolIndex.current + 1) % playerJoinPlayers.length;
+  replaySound(player, options);
 }
 
 function replaySound(
@@ -240,19 +261,19 @@ function getCountdownBucket(remainingMs: number) {
   }
 
   if (remainingMs > 4_000) {
-    return `wide-${Math.floor(remainingMs / 1_000)}`;
+    return `wide-${Math.ceil(remainingMs / 1_000)}`;
   }
 
   if (remainingMs > 2_000 && remainingMs <= 4_000) {
-    return `slow-${Math.floor(remainingMs / 500)}`;
+    return `slow-${Math.ceil(remainingMs / 500)}`;
   }
 
   if (remainingMs > 1_000 && remainingMs <= 2_000) {
-    return `mid-${Math.floor(remainingMs / 250)}`;
+    return `mid-${Math.ceil(remainingMs / 250)}`;
   }
 
   if (remainingMs > 0 && remainingMs <= 1_000) {
-    return `fast-${Math.floor(remainingMs / 180)}`;
+    return `fast-${Math.ceil(remainingMs / 180)}`;
   }
 
   return null;

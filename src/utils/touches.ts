@@ -55,11 +55,13 @@ export function mapTouches(
 ): TouchPoint[] {
   const nextTouches = event.nativeEvent.touches ?? [];
 
-  return Array.from(nextTouches).map((touch) => ({
-    id: String(touch.identifier),
-    x: touch.pageX,
-    y: touch.pageY,
-  }));
+  return Array.from(nextTouches)
+    .map((touch) => ({
+      id: String(touch.identifier),
+      x: touch.pageX,
+      y: touch.pageY,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export function mapChangedTouchIds(

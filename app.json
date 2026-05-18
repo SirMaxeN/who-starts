@@ -2,7 +2,10 @@
   "expo": {
     "name": "WhoStarts",
     "slug": "WhoStarts",
-    "version": "1.0.0",
+    "version": "1.0.8",
+    "experiments": {
+      "baseUrl": "/games/whostarts"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -21,13 +24,26 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "package": "com.sirmaxen.WhoStarts"
     },
     "web": {
+      "output": "single",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-audio"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bb522a6d-f93a-43fd-95ed-3ef14041894f"
+      }
+    }
   }
 }

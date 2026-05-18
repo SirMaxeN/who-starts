@@ -104,7 +104,7 @@ export function CenterPanel({
         <>
           <Text style={styles.centerEyebrow}>Mode</Text>
           <Text style={styles.centerValue}>Manual</Text>
-          <Text style={styles.centerHint}>Need 2+ fingers</Text>
+          <Text style={styles.centerHint}>Hold 2+ fingers outside START</Text>
         </>
       );
     }
@@ -133,7 +133,7 @@ export function CenterPanel({
       <>
         <Text style={styles.centerEyebrow}>WhoStarts?</Text>
         <Text style={styles.centerValue}>{getModeLabel(roundMode)}</Text>
-        <Text style={styles.centerHint}>Place 2+ fingers to begin</Text>
+        <Text style={styles.centerHint}>Place 2+ fingers anywhere</Text>
       </>
     );
   }
