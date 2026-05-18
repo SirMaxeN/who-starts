@@ -1,0 +1,259 @@
+import { createAudioPlayer } from 'expo-audio';
+import { useEffect, useRef, useState } from 'react';
+import type { RoundMode } from '../types/game';
+
+const CHOSEN_SOUND = require('../../assets/sounds/chosen.mp3');
+const MENU_SOUND = require('../../assets/sounds/menu.mp3');
+const PLAYER_SOUND = require('../../assets/sounds/player.mp3');
+const PRESS_1_SOUND = require('../../assets/sounds/press1.mp3');
+const PRESS_2_SOUND = require('../../assets/sounds/press2.mp3');
+const PRESS_3_SOUND = require('../../assets/sounds/press3.mp3');
+const TIMER_SOUND = require('../../assets/sounds/timer.mp3');
+const TIMER_POOL_SIZE = 6;
+
+const PRESS_VOLUMES = [0.55, 0.55, 0.55] as const;
+const PLAYER_BASE_RATE = 0.9;
+const PLAYER_RATE_STEP = 0.08;
+const PLAYER_MAX_RATE = 1.55;
+const CHOSEN_VOLUME = 0.82;
+const MENU_VOLUME = 0.5;
+const PLAYER_VOLUME = 0.68;
+const TIMER_VOLUME = 0.42;
+
+type SoundPlayer = ReturnType<typeof createAudioPlayer>;
+
+type UseSoundEffectsControllerParams = {
+  countdownActive: boolean;
+  enabled: boolean;
+  playerCount: number;
+  remainingMs: number | null;
+  roundMode: RoundMode;
+  winnerId: string | null;
+};
+
+export function useSoundEffectsController({
+  countdownActive,
+  enabled,
+  playerCount,
+  remainingMs,
+  roundMode,
+  winnerId,
+}: UseSoundEffectsControllerParams) {
+  const [timerPlayers] = useState(() =>
+    Array.from({ length: TIMER_POOL_SIZE }, () => createAudioPlayer(TIMER_SOUND))
+  );
+  const [playerJoinPlayer] = useState(() => createAudioPlayer(PLAYER_SOUND));
+  const [press1Player] = useState(() => createAudioPlayer(PRESS_1_SOUND));
+  const [press2Player] = useState(() => createAudioPlayer(PRESS_2_SOUND));
+  const [press3Player] = useState(() => createAudioPlayer(PRESS_3_SOUND));
+  const [menuPlayer] = useState(() => createAudioPlayer(MENU_SOUND));
+  const [chosenPlayer] = useState(() => createAudioPlayer(CHOSEN_SOUND));
+
+  const previousPlayerCount = useRef(playerCount);
+  const previousWinnerId = useRef<string | null>(winnerId);
+  const previousRemainingMs = useRef<number | null>(remainingMs);
+  const previousCountdownActive = useRef(countdownActive);
+  const pressIndex = useRef(0);
+  const timerPoolIndex = useRef(0);
+
+  useEffect(() => {
+    const players = [
+      ...timerPlayers,
+      playerJoinPlayer,
+      press1Player,
+      press2Player,
+      press3Player,
+      menuPlayer,
+      chosenPlayer,
+    ];
+
+    for (const player of players) {
+      player.loop = false;
+    }
+
+    return () => {
+      for (const player of players) {
+        player.pause();
+        player.remove();
+      }
+    };
+  }, [
+    chosenPlayer,
+    menuPlayer,
+    playerJoinPlayer,
+    press1Player,
+    press2Player,
+    press3Player,
+    timerPlayers,
+  ]);
+
+  useEffect(() => {
+    if (!enabled) {
+      previousPlayerCount.current = playerCount;
+      previousWinnerId.current = winnerId;
+      previousRemainingMs.current = remainingMs;
+      previousCountdownActive.current = countdownActive;
+      return;
+    }
+
+    if (playerCount > previousPlayerCount.current) {
+      const playbackRate = Math.min(
+        PLAYER_MAX_RATE,
+        PLAYER_BASE_RATE + (playerCount - 1) * PLAYER_RATE_STEP
+      );
+
+      replaySound(playerJoinPlayer, {
+        playbackRate,
+        shouldCorrectPitch: false,
+        volume: PLAYER_VOLUME,
+      });
+    }
+
+    previousPlayerCount.current = playerCount;
+  }, [enabled, playerCount, playerJoinPlayer]);
+
+  useEffect(() => {
+    if (!enabled) {
+      previousWinnerId.current = winnerId;
+      return;
+    }
+
+    if (winnerId && previousWinnerId.current !== winnerId) {
+      replaySound(chosenPlayer, { volume: CHOSEN_VOLUME });
+    }
+
+    previousWinnerId.current = winnerId;
+  }, [chosenPlayer, enabled, winnerId]);
+
+  useEffect(() => {
+    if (!enabled) {
+      previousRemainingMs.current = remainingMs;
+      previousCountdownActive.current = countdownActive;
+      return;
+    }
+
+    if (!countdownActive || roundMode === 'manual' || remainingMs === null) {
+      previousRemainingMs.current = remainingMs;
+      previousCountdownActive.current = countdownActive;
+      return;
+    }
+
+    const previousRemaining = previousCountdownActive.current ? previousRemainingMs.current : null;
+    const shouldPlayImmediateStartBeep = !previousCountdownActive.current;
+
+    if (shouldPlayImmediateStartBeep) {
+      playTimerBeep(timerPlayers, timerPoolIndex);
+    } else if (previousRemaining !== null) {
+      const crossedBucket = getCrossedCountdownBucket(previousRemaining, remainingMs);
+
+      if (crossedBucket) {
+        playTimerBeep(timerPlayers, timerPoolIndex);
+      }
+    }
+
+    previousRemainingMs.current = remainingMs;
+    previousCountdownActive.current = countdownActive;
+  }, [countdownActive, enabled, remainingMs, roundMode, timerPlayers]);
+
+  function playPress() {
+    if (!enabled) {
+      return;
+    }
+
+    const pressPlayers = [press1Player, press2Player, press3Player];
+    const nextIndex = pressIndex.current % pressPlayers.length;
+    const player = pressPlayers[nextIndex];
+
+    replaySound(player, { volume: PRESS_VOLUMES[nextIndex] });
+    pressIndex.current = (nextIndex + 1) % pressPlayers.length;
+  }
+
+  function playMenuOpen() {
+    if (!enabled) {
+      return;
+    }
+
+    playPress();
+    replaySound(menuPlayer, { volume: MENU_VOLUME });
+  }
+
+  return {
+    playMenuOpen,
+    playPress,
+  };
+}
+
+function playTimerBeep(timerPlayers: SoundPlayer[], timerPoolIndex: { current: number }) {
+  const player = timerPlayers[timerPoolIndex.current % timerPlayers.length];
+  timerPoolIndex.current = (timerPoolIndex.current + 1) % timerPlayers.length;
+  replaySound(player, { volume: TIMER_VOLUME });
+}
+
+function replaySound(
+  player: SoundPlayer,
+  options: {
+    playbackRate?: number;
+    shouldCorrectPitch?: boolean;
+    volume?: number;
+  } = {}
+) {
+  if (typeof options.volume === 'number') {
+    player.volume = options.volume;
+  }
+
+  if (typeof options.shouldCorrectPitch === 'boolean') {
+    player.shouldCorrectPitch = options.shouldCorrectPitch;
+  }
+
+  if (typeof options.playbackRate === 'number') {
+    player.setPlaybackRate(options.playbackRate);
+  }
+
+  void player
+    .seekTo(0)
+    .catch(() => {
+      // Ignore rewind errors and still try to play.
+    })
+    .finally(() => {
+      player.play();
+    });
+}
+
+function getCrossedCountdownBucket(previousRemainingMs: number, nextRemainingMs: number) {
+  if (nextRemainingMs >= previousRemainingMs) {
+    return false;
+  }
+
+  const previousBucket = getCountdownBucket(previousRemainingMs);
+  const nextBucket = getCountdownBucket(nextRemainingMs);
+
+  if (previousBucket === null || nextBucket === null) {
+    return false;
+  }
+
+  return previousBucket !== nextBucket;
+}
+
+function getCountdownBucket(remainingMs: number) {
+  if (remainingMs <= 0) {
+    return null;
+  }
+
+  if (remainingMs > 4_000) {
+    return `wide-${Math.floor(remainingMs / 1_000)}`;
+  }
+
+  if (remainingMs > 2_000 && remainingMs <= 4_000) {
+    return `slow-${Math.floor(remainingMs / 500)}`;
+  }
+
+  if (remainingMs > 1_000 && remainingMs <= 2_000) {
+    return `mid-${Math.floor(remainingMs / 250)}`;
+  }
+
+  if (remainingMs > 0 && remainingMs <= 1_000) {
+    return `fast-${Math.floor(remainingMs / 180)}`;
+  }
+
+  return null;
+}

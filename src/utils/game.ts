@@ -29,3 +29,24 @@ export function pickWinner(touches: TouchPoint[]) {
 export function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
+
+export function areTouchesEqual(left: TouchPoint[], right: TouchPoint[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftTouch = left[index];
+    const rightTouch = right[index];
+
+    if (
+      leftTouch?.id !== rightTouch?.id ||
+      leftTouch?.x !== rightTouch?.x ||
+      leftTouch?.y !== rightTouch?.y
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}

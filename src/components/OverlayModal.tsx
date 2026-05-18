@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
+import type { NativeSyntheticEvent, NativeTouchEvent } from 'react-native';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 type OverlayModalProps = {
   children: ReactNode;
   onClose: () => void;
+  onTouchStart?: (event: NativeSyntheticEvent<NativeTouchEvent>) => void;
   title: string;
   visible: boolean;
 };
@@ -11,12 +13,13 @@ type OverlayModalProps = {
 export function OverlayModal({
   children,
   onClose,
+  onTouchStart,
   title,
   visible,
 }: OverlayModalProps) {
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+      <Pressable onPress={onClose} onTouchStart={onTouchStart} style={styles.modalBackdrop}>
         <Pressable onPress={() => undefined} style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>

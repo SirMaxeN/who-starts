@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RoundMode, TouchPoint } from '../types/game';
 import { getModeLabel, getTouchColor } from '../utils/game';
 
@@ -7,6 +8,7 @@ export const CENTER_PANEL_RADIUS = CENTER_PANEL_SIZE / 2;
 
 type CenterPanelProps = {
   activeTouches: TouchPoint[];
+  isChoosing: boolean;
   playerLabels: Record<string, string>;
   remainingMs: number | null;
   roundMode: RoundMode;
@@ -16,15 +18,62 @@ type CenterPanelProps = {
 
 export function CenterPanel({
   activeTouches,
+  isChoosing,
   onStartManualRound,
   playerLabels,
   remainingMs,
   roundMode,
   winner,
 }: CenterPanelProps) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isChoosing && !winner) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: winner ? 420 : 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: false,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: winner ? 420 : 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+
+    return () => {
+      pulse.stopAnimation();
+    };
+  }, [isChoosing, pulse, winner]);
+
+  const winnerColor = winner ? getTouchColor(winner.id) : '#00F5FF';
+  const animatedBorderColor = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: winner
+      ? ['rgba(94, 231, 255, 0.3)', winnerColor]
+      : ['rgba(94, 231, 255, 0.3)', 'rgba(255, 79, 216, 0.65)'],
+  });
+  const animatedShadowOpacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.24, winner ? 0.55 : 0.42],
+  });
+  const animatedScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, winner ? 1.04 : 1.02],
+  });
+
   function renderContent() {
     if (winner) {
-      const winnerColor = getTouchColor(winner.id);
       const winnerLabel = playerLabels[winner.id] ?? 'Winner';
 
       return (
@@ -89,7 +138,25 @@ export function CenterPanel({
     );
   }
 
-  return <View style={styles.centerCard}>{renderContent()}</View>;
+  return (
+    <Animated.View
+      style={[
+        styles.centerCard,
+        {
+          borderColor: animatedBorderColor,
+          shadowColor: winnerColor,
+          shadowOpacity: animatedShadowOpacity,
+          transform: [
+            { translateX: -CENTER_PANEL_RADIUS },
+            { translateY: -CENTER_PANEL_RADIUS },
+            { scale: animatedScale },
+          ],
+        },
+      ]}
+    >
+      {renderContent()}
+    </Animated.View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -99,10 +166,6 @@ const styles = StyleSheet.create({
     left: '50%',
     width: CENTER_PANEL_SIZE,
     minHeight: CENTER_PANEL_SIZE,
-    transform: [
-      { translateX: -CENTER_PANEL_RADIUS },
-      { translateY: -CENTER_PANEL_RADIUS },
-    ],
     borderRadius: CENTER_PANEL_RADIUS,
     padding: 24,
     alignItems: 'center',

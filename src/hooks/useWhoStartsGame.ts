@@ -5,45 +5,81 @@ import type {
   NativeSyntheticEvent,
   NativeTouchEvent,
 } from 'react-native';
-import type { RoundMode, SurfaceSize, TouchPoint } from '../types/game';
+import type { AppSettings, RoundMode, SurfaceSize, TouchPoint } from '../types/game';
+import { DEFAULT_SETTINGS } from '../constants/game';
+import { useMusicController } from './useMusicController';
+import { useSoundEffectsController } from './useSoundEffectsController';
+import { AppSettingsStorage } from '../services/AppSettingsStorage';
 import { RoundModeStorage } from '../services/RoundModeStorage';
-import { getTouchSignature, pickWinner } from '../utils/game';
+import { areTouchesEqual, getTouchSignature, pickWinner } from '../utils/game';
 import {
   isInsideCenterZone,
+  isInsideTopControlZone,
   mapChangedTouchIds,
   mapTouches,
 } from '../utils/touches';
 
-const DEFAULT_MODE: RoundMode = 3000;
+const DEFAULT_MODE: RoundMode = 2000;
 
 export function useWhoStartsGame() {
   const [roundMode, setRoundMode] = useState<RoundMode>(DEFAULT_MODE);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [activeTouches, setActiveTouches] = useState<TouchPoint[]>([]);
   const [winner, setWinner] = useState<TouchPoint | null>(null);
   const [awaitingRelease, setAwaitingRelease] = useState(false);
   const [countdownDeadline, setCountdownDeadline] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isRoundModeOpen, setIsRoundModeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [surfaceSize, setSurfaceSize] = useState<SurfaceSize>({ width: 0, height: 0 });
   const [playerLabels, setPlayerLabels] = useState<Record<string, string>>({});
   const hasLoadedSettings = useRef(false);
   const nextPlayerNumber = useRef(1);
   const ignoredTouchIds = useRef<Set<string>>(new Set());
+  const selectionState =
+    winner !== null || awaitingRelease
+      ? 'post'
+      : activeTouches.length >= 2
+        ? 'pre'
+        : 'idle';
+
+  useMusicController({
+    enabled: settings.music,
+    hasTouches: activeTouches.length > 0,
+    selectionState,
+  });
+  const soundEffects = useSoundEffectsController({
+    countdownActive:
+      roundMode !== 'manual' &&
+      activeTouches.length >= 2 &&
+      remainingMs !== null &&
+      !winner &&
+      !awaitingRelease,
+    enabled: settings.sounds,
+    playerCount: activeTouches.length,
+    remainingMs,
+    roundMode,
+    winnerId: winner?.id ?? null,
+  });
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadMode() {
-      const savedMode = await RoundModeStorage.load(DEFAULT_MODE);
+    async function loadSettings() {
+      const [savedMode, savedSettings] = await Promise.all([
+        RoundModeStorage.load(DEFAULT_MODE),
+        AppSettingsStorage.load(),
+      ]);
 
       if (isMounted) {
         setRoundMode(savedMode);
+        setSettings(savedSettings);
         hasLoadedSettings.current = true;
       }
     }
 
-    loadMode();
+    loadSettings();
 
     return () => {
       isMounted = false;
@@ -57,6 +93,14 @@ export function useWhoStartsGame() {
 
     RoundModeStorage.save(roundMode);
   }, [roundMode]);
+
+  useEffect(() => {
+    if (!hasLoadedSettings.current) {
+      return;
+    }
+
+    AppSettingsStorage.save(settings);
+  }, [settings]);
 
   const touchSignature = getTouchSignature(activeTouches);
 
@@ -97,7 +141,7 @@ export function useWhoStartsGame() {
     setPlayerLabels((currentLabels) => {
       if (activeTouches.length === 0) {
         nextPlayerNumber.current = 1;
-        return {};
+        return Object.keys(currentLabels).length === 0 ? currentLabels : {};
       }
 
       const nextLabels = { ...currentLabels };
@@ -169,7 +213,16 @@ export function useWhoStartsGame() {
   }
 
   function handleTouchStartEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    registerTouchStart(event);
     handleTouchEventInternal(event, true);
+  }
+
+  function registerTouchStart(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    const changedTouches = mapChangedTouchIds(event);
+
+    for (const _touch of changedTouches) {
+      soundEffects.playPress();
+    }
   }
 
   function handleTouchEventInternal(
@@ -190,6 +243,10 @@ export function useWhoStartsGame() {
         surfaceSize.width > 0 &&
         surfaceSize.height > 0 &&
         isInsideCenterZone(touch.x, touch.y, surfaceSize);
+      const isTopControlTouch =
+        surfaceSize.width > 0 &&
+        surfaceSize.height > 0 &&
+        isInsideTopControlZone(touch.x, touch.y, surfaceSize);
 
       if (
         isTouchStart &&
@@ -205,7 +262,7 @@ export function useWhoStartsGame() {
 
       if (
         isNewTouch &&
-        isCenterTouch
+        (isCenterTouch || isTopControlTouch)
       ) {
         ignoredTouchIds.current.add(touch.id);
       }
@@ -217,29 +274,52 @@ export function useWhoStartsGame() {
       }
     }
 
-    setActiveTouches(
-      nextTouches.filter((touch) => !ignoredTouchIds.current.has(touch.id))
+    const filteredTouches = nextTouches.filter(
+      (touch) => !ignoredTouchIds.current.has(touch.id)
+    );
+
+    setActiveTouches((currentTouches) =>
+      areTouchesEqual(currentTouches, filteredTouches)
+        ? currentTouches
+        : filteredTouches
     );
   }
 
   return {
     activeTouches,
     awaitingRelease,
+    closeHelp: () => setIsHelpOpen(false),
+    closeRoundMode: () => setIsRoundModeOpen(false),
+    closeSettings: () => setIsSettingsOpen(false),
     handleTouchEvent,
     handleTouchStartEvent,
+    handleUiTouchStart: registerTouchStart,
     handleSurfaceLayout,
+    isChoosing:
+      settings.animations && activeTouches.length >= 2 && !winner && !awaitingRelease,
     isHelpOpen,
+    isRoundModeOpen,
     isSettingsOpen,
+    openHelp: () => {
+      soundEffects.playMenuOpen();
+      setIsHelpOpen(true);
+    },
+    openRoundMode: () => {
+      soundEffects.playMenuOpen();
+      setIsRoundModeOpen(true);
+    },
+    openSettings: () => {
+      soundEffects.playMenuOpen();
+      setIsSettingsOpen(true);
+    },
     playerLabels,
-    openHelp: () => setIsHelpOpen(true),
-    openSettings: () => setIsSettingsOpen(true),
-    closeHelp: () => setIsHelpOpen(false),
-    closeSettings: () => setIsSettingsOpen(false),
     remainingMs,
     roundMode,
     selectWinner,
     setActiveTouches,
     setRoundMode,
+    setSettings,
+    settings,
     surfaceSize,
     visibleTouches: winner ? [winner] : activeTouches,
     winner,

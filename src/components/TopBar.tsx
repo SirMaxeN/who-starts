@@ -2,23 +2,35 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RoundMode } from '../types/game';
 import { getModeLabel } from '../utils/game';
 
+export const TOP_BAR_TOP = 52;
+export const TOP_BAR_SIDE = 18;
+export const TOP_BAR_ICON_SIZE = 46;
+export const TOP_BAR_CHIP_WIDTH = 118;
+export const TOP_BAR_CHIP_HEIGHT = 44;
+
 type TopBarProps = {
   onOpenHelp: () => void;
+  onOpenModePicker: () => void;
   onOpenSettings: () => void;
   roundMode: RoundMode;
 };
 
-export function TopBar({ onOpenHelp, onOpenSettings, roundMode }: TopBarProps) {
+export function TopBar({
+  onOpenHelp,
+  onOpenModePicker,
+  onOpenSettings,
+  roundMode,
+}: TopBarProps) {
   return (
     <View pointerEvents="box-none" style={styles.topBar}>
       <Pressable onPress={onOpenHelp} style={styles.iconButton}>
         <Text style={styles.iconButtonText}>?</Text>
       </Pressable>
-      <View style={styles.modeChip}>
+      <Pressable onPress={onOpenModePicker} style={styles.modeChip}>
         <Text style={styles.modeChipText}>{getModeLabel(roundMode)}</Text>
-      </View>
+      </Pressable>
       <Pressable onPress={onOpenSettings} style={styles.iconButton}>
-        <Text style={styles.iconButtonText}>SET</Text>
+        <Text style={styles.iconButtonIcon}>{'\u2699'}</Text>
       </Pressable>
     </View>
   );
@@ -27,9 +39,9 @@ export function TopBar({ onOpenHelp, onOpenSettings, roundMode }: TopBarProps) {
 const styles = StyleSheet.create({
   topBar: {
     position: 'absolute',
-    top: 52,
-    left: 18,
-    right: 18,
+    top: TOP_BAR_TOP,
+    left: TOP_BAR_SIDE,
+    right: TOP_BAR_SIDE,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -51,6 +63,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   modeChip: {
+    width: TOP_BAR_CHIP_WIDTH,
+    minHeight: TOP_BAR_CHIP_HEIGHT,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
@@ -64,5 +78,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.1,
     textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  iconButtonIcon: {
+    color: '#E9F7FF',
+    fontSize: 20,
+    fontWeight: '700',
   },
 });

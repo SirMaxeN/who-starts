@@ -1,8 +1,15 @@
-import type { BackgroundOrb, RoundMode } from '../types/game';
+import type { AppSettings, BackgroundOrb, RoundMode } from '../types/game';
 
 export const STORAGE_KEY = 'whostarts.round-mode';
+export const SETTINGS_STORAGE_KEY = 'whostarts.settings';
+export const DEFAULT_SETTINGS: AppSettings = {
+  animations: true,
+  music: true,
+  sounds: true,
+};
 
 export const MODE_OPTIONS: { label: string; value: RoundMode }[] = [
+  { label: '1s', value: 1000 },
   { label: '2s', value: 2000 },
   { label: '3s', value: 3000 },
   { label: '5s', value: 5000 },
