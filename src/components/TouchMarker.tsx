@@ -24,6 +24,18 @@ export function TouchMarker({
   const isWinner = winnerId === touch.id;
   const pulse = useRef(new Animated.Value(0)).current;
   const orbit = useRef(new Animated.Value(0)).current;
+  const orbitAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const orbitValueRef = useRef(0);
+
+  useEffect(() => {
+    const listenerId = orbit.addListener(({ value }) => {
+      orbitValueRef.current = value;
+    });
+
+    return () => {
+      orbit.removeListener(listenerId);
+    };
+  }, [orbit]);
 
   useEffect(() => {
     const shouldPulse = (animationsEnabled && isChoosing) || isWinner;
@@ -60,31 +72,52 @@ export function TouchMarker({
   }, [animationsEnabled, isChoosing, isWinner, pulse]);
 
   useEffect(() => {
-    const shouldRotate = (animationsEnabled && !isWinner) || isWinner;
-
-    orbit.stopAnimation();
+    const shouldRotate = animationsEnabled || isWinner;
+    const rotationDuration = isWinner ? 2400 : 7200;
 
     if (!shouldRotate) {
+      orbitAnimationRef.current?.stop();
+      orbitAnimationRef.current = null;
+      orbitValueRef.current = 0;
       orbit.setValue(0);
       return;
     }
 
-    orbit.setValue(0);
-    Animated.loop(
-      Animated.timing(orbit, {
-        toValue: 1,
-        duration: isWinner ? 2400 : 7200,
+    orbitAnimationRef.current?.stop();
+    orbitAnimationRef.current = null;
+
+    const startOrbitLoop = (duration: number) => {
+      const currentValue = orbitValueRef.current;
+      const nextTurn = Math.floor(currentValue) + 1;
+      const remainingTurn = Math.max(0.0001, nextTurn - currentValue);
+
+      const animation = Animated.timing(orbit, {
+        toValue: nextTurn,
+        duration: Math.max(1, Math.round(duration * remainingTurn)),
         easing: Easing.linear,
         useNativeDriver: true,
-      })
-    ).start();
+      });
+
+      orbitAnimationRef.current = animation;
+      animation.start(({ finished }) => {
+        if (!finished) {
+          return;
+        }
+
+        orbitValueRef.current = nextTurn;
+        startOrbitLoop(duration);
+      });
+    };
+
+    startOrbitLoop(rotationDuration);
 
     return () => {
-      orbit.stopAnimation();
+      orbitAnimationRef.current?.stop();
+      orbitAnimationRef.current = null;
     };
   }, [animationsEnabled, isWinner, orbit]);
 
-  const orbitRotate = orbit.interpolate({
+  const orbitRotate = Animated.modulo(orbit, 1).interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
@@ -179,7 +212,14 @@ export function TouchMarker({
             },
           ]}
         >
-          <Text style={[styles.labelText, { color }]}>{label}</Text>
+          <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+            numberOfLines={1}
+            style={[styles.labelText, { color }]}
+          >
+            {label}
+          </Text>
         </Animated.View>
         <Animated.View
           style={[
@@ -192,7 +232,12 @@ export function TouchMarker({
             },
           ]}
         >
-          <Text style={[styles.labelText, { color }]}>
+          <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+            numberOfLines={1}
+            style={[styles.labelText, { color }]}
+          >
             {label}
           </Text>
         </Animated.View>
@@ -249,10 +294,13 @@ const styles = StyleSheet.create({
   },
   labelTag: {
     position: 'absolute',
+    width: 88,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   labelTagTop: {
     top: -12,
@@ -264,6 +312,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
+    textAlign: 'center',
     textTransform: 'uppercase',
   },
 });
