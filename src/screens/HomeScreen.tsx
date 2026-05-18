@@ -54,6 +54,7 @@ export function HomeScreen() {
       <View
         onLayout={game.handleSurfaceLayout}
         onTouchCancel={game.handleTouchEvent}
+        onTouchEndCapture={game.handleTouchEvent}
         onTouchEnd={game.handleTouchEvent}
         onTouchMove={game.handleTouchEvent}
         onTouchStart={game.handleTouchStartEvent}

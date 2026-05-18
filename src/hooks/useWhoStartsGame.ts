@@ -5,6 +5,7 @@ import type {
   NativeSyntheticEvent,
   NativeTouchEvent,
 } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { AppSettings, RoundMode, SurfaceSize, TouchPoint } from '../types/game';
 import { DEFAULT_SETTINGS } from '../constants/game';
 import { useMusicController } from './useMusicController';
@@ -20,6 +21,8 @@ import {
 } from '../utils/touches';
 
 const DEFAULT_MODE: RoundMode = 2000;
+const WEB_TOUCH_RECONCILE_INTERVAL_MS = 1000;
+const AWAITING_RELEASE_STALE_RESET_MS = 2000;
 
 export function useWhoStartsGame() {
   const [roundMode, setRoundMode] = useState<RoundMode>(DEFAULT_MODE);
@@ -41,6 +44,8 @@ export function useWhoStartsGame() {
   const activeTouchesRef = useRef<TouchPoint[]>([]);
   const pendingTouchesRef = useRef<TouchPoint[] | null>(null);
   const touchFrameRef = useRef<number | null>(null);
+  const latestWebTouchesRef = useRef<TouchPoint[] | null>(null);
+  const lastTouchEventAtRef = useRef(Date.now());
   const selectionState =
     winner !== null || awaitingRelease
       ? 'post'
@@ -72,10 +77,125 @@ export function useWhoStartsGame() {
   }, [activeTouches]);
 
   useEffect(() => {
+    if (!awaitingRelease || activeTouches.length === 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (Date.now() - lastTouchEventAtRef.current < AWAITING_RELEASE_STALE_RESET_MS) {
+        return;
+      }
+
+      ignoredTouchIds.current.clear();
+      latestWebTouchesRef.current = [];
+      queueActiveTouches([]);
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [activeTouches.length, awaitingRelease]);
+
+  useEffect(() => {
     return () => {
       if (touchFrameRef.current !== null) {
         cancelAnimationFrame(touchFrameRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleAppBlur = () => {
+      ignoredTouchIds.current.clear();
+      latestWebTouchesRef.current = [];
+      queueActiveTouches([]);
+    };
+
+    const changeSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        handleAppBlur();
+      }
+    });
+    const blurSubscription =
+      Platform.OS === 'android' ? AppState.addEventListener('blur', handleAppBlur) : null;
+
+    return () => {
+      changeSubscription.remove();
+      blurSubscription?.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+
+    const mapWebTouches = (touchList: TouchList | null | undefined) =>
+      Array.from(touchList ?? [])
+        .map((touch) => ({
+          id: String(touch.identifier),
+          x: touch.pageX,
+          y: touch.pageY,
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id));
+
+    const updateWebTouches = (touches: TouchPoint[]) => {
+      latestWebTouchesRef.current = touches;
+    };
+
+    const handleWindowTouch = (event: TouchEvent) => {
+      updateWebTouches(mapWebTouches(event.touches));
+    };
+
+    const clearWebTouches = () => {
+      updateWebTouches([]);
+      ignoredTouchIds.current.clear();
+      queueActiveTouches([]);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        clearWebTouches();
+      }
+    };
+
+    window.addEventListener('touchstart', handleWindowTouch, { passive: true });
+    window.addEventListener('touchmove', handleWindowTouch, { passive: true });
+    window.addEventListener('touchend', handleWindowTouch, { passive: true });
+    window.addEventListener('touchcancel', handleWindowTouch, { passive: true });
+    window.addEventListener('blur', clearWebTouches);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const reconcileTimer = window.setInterval(() => {
+      const webTouches = latestWebTouchesRef.current;
+
+      if (webTouches === null) {
+        return;
+      }
+
+      const currentIds = new Set(webTouches.map((touch) => touch.id));
+
+      for (const ignoredId of Array.from(ignoredTouchIds.current)) {
+        if (!currentIds.has(ignoredId)) {
+          ignoredTouchIds.current.delete(ignoredId);
+        }
+      }
+
+      const filteredTouches = webTouches.filter(
+        (touch) => !ignoredTouchIds.current.has(touch.id)
+      );
+
+      if (!areTouchesEqual(activeTouchesRef.current, filteredTouches)) {
+        queueActiveTouches(filteredTouches);
+      }
+    }, WEB_TOUCH_RECONCILE_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener('touchstart', handleWindowTouch);
+      window.removeEventListener('touchmove', handleWindowTouch);
+      window.removeEventListener('touchend', handleWindowTouch);
+      window.removeEventListener('touchcancel', handleWindowTouch);
+      window.removeEventListener('blur', clearWebTouches);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(reconcileTimer);
     };
   }, []);
 
@@ -251,6 +371,7 @@ export function useWhoStartsGame() {
     event: NativeSyntheticEvent<NativeTouchEvent>,
     isTouchStart: boolean
   ) {
+    lastTouchEventAtRef.current = Date.now();
     const nextTouches = mapTouches(event);
     const currentIds = new Set(nextTouches.map((touch) => touch.id));
     const changedTouches = mapChangedTouchIds(event);
