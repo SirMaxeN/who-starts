@@ -7,8 +7,10 @@ import type { CoinHistoryEntry, CoinMode, CoinSide, RoundMode } from '../../type
 type CoinModeScreenProps = {
   animationsEnabled: boolean;
   contextLabel: string;
+  historyByMode?: Record<CoinMode, CoinHistoryEntry[]>;
   history: CoinHistoryEntry[];
   mode: CoinMode;
+  onChangeMode?: (direction: -1 | 1) => void;
   onCommitFlip: () => void;
   onFlip: () => CoinSide;
   onOpenContext: () => void;
@@ -25,8 +27,10 @@ type CoinModeScreenProps = {
 export function CoinModeScreen({
   animationsEnabled,
   contextLabel,
+  historyByMode,
   history,
   mode,
+  onChangeMode,
   onCommitFlip,
   onFlip,
   onOpenContext,
@@ -52,8 +56,10 @@ export function CoinModeScreen({
       />
       <CoinScreen
         animationsEnabled={animationsEnabled}
+        historyByMode={historyByMode}
         history={history}
         mode={mode}
+        onChangeMode={onChangeMode}
         onCommitFlip={onCommitFlip}
         onFlip={onFlip}
         onFlipResultSound={onPlayFlipResultSound}

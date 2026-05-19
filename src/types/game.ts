@@ -55,9 +55,19 @@ export type DiceHistoryEntry = {
   result: number;
 };
 
-export type CoinMode = 'heads-tails' | 'yes-no';
+export type CoinMode = 'heads-tails' | 'yes-no' | 'do-skip' | 'left-right' | 'odd-even';
 
-export type CoinSide = 'Heads' | 'Tails' | 'Yes' | 'No';
+export type CoinSide =
+  | 'Heads'
+  | 'Tails'
+  | 'Yes'
+  | 'No'
+  | 'Do'
+  | 'Skip'
+  | 'Left'
+  | 'Right'
+  | 'Odd'
+  | 'Even';
 
 export type CoinHistoryEntry = {
   id: string;

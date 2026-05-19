@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -52,6 +52,11 @@ const DICE_LABEL_LAYOUT: Record<DiceKind, { kindTop: number; resultTop: number }
   d6: { kindTop: -24, resultTop: 72 },
   d8: { kindTop: -24, resultTop: 68 },
 };
+
+const MIN_DICE_ROLL_CHANGES = 8;
+const EXTRA_DICE_ROLL_CHANGES = 2;
+const DICE_ROLL_CHANGE_DURATION_MS = 60;
+const DICE_JUMP_DURATION_MULTIPLIER = 2;
 
 function randomRoll(kind: DiceKind) {
   return Math.floor(Math.random() * DICE_META[kind].sides) + 1;
@@ -301,21 +306,31 @@ export function DiceScreen({
     showRollingNumber(
       getRollingTickValue(selectedKind, displayedResultRef.current, finalResult)
     );
+    const rollChanges =
+      MIN_DICE_ROLL_CHANGES + Math.floor(Math.random() * (EXTRA_DICE_ROLL_CHANGES + 1));
+    const rollDuration = rollChanges * DICE_ROLL_CHANGE_DURATION_MS;
+    const jumpDuration = Math.round(rollDuration * DICE_JUMP_DURATION_MULTIPLIER);
+
+    let completedRollChanges = 1;
     rollInterval.current = setInterval(() => {
+      if (completedRollChanges >= rollChanges) {
+        clearRollTicker();
+        finishRoll(finalResult, true);
+        return;
+      }
+
+      completedRollChanges += 1;
       showRollingNumber(
         getRollingTickValue(selectedKind, displayedResultRef.current, finalResult)
       );
-    }, 120);
+    }, DICE_ROLL_CHANGE_DURATION_MS);
 
     Animated.timing(rollProgress, {
       toValue: 1,
-      duration: 880,
+      duration: jumpDuration,
       easing: Easing.inOut(Easing.cubic),
       useNativeDriver: true,
-    }).start(() => {
-      clearRollTicker();
-      finishRoll(finalResult, true);
-    });
+    }).start();
   }
 
   function handleCarouselEnd(x: number, y: number) {
@@ -438,19 +453,152 @@ export function DiceScreen({
           <Text style={styles.emptyHistory}>No rolls yet</Text>
         ) : (
           history.map((entry, index) => (
-            <View
+            <DiceHistoryChip
+              accent={DICE_META[entry.kind].accent}
+              entryId={entry.id}
+              isLatest={index === 0}
               key={entry.id}
-              style={[styles.historyChip, index === 0 && styles.historyChipLatest]}
+              style={[
+                styles.historyChip,
+                {
+                  backgroundColor: `${DICE_META[entry.kind].accent}18`,
+                  borderColor: `${DICE_META[entry.kind].accent}66`,
+                },
+                index === 0 && {
+                  backgroundColor: `${DICE_META[entry.kind].accent}26`,
+                  borderColor: `${DICE_META[entry.kind].accent}AA`,
+                },
+              ]}
             >
-              <Text style={[styles.historyKind, index === 0 && styles.historyKindLatest]}>
+              <Text
+                style={[
+                  styles.historyKind,
+                  { color: DICE_META[entry.kind].accent },
+                  index === 0 && styles.historyKindLatest,
+                ]}
+              >
                 {entry.kind.toUpperCase()}
               </Text>
-              <Text style={styles.historyValue}>{entry.result}</Text>
-            </View>
+              <Text style={[styles.historyValue, { color: DICE_META[entry.kind].accent }]}>
+                {entry.result}
+              </Text>
+            </DiceHistoryChip>
           ))
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function DiceHistoryChip({
+  accent,
+  children,
+  entryId,
+  isLatest,
+  style,
+}: {
+  accent: string;
+  children: ReactNode;
+  entryId: string;
+  isLatest: boolean;
+  style: object;
+}) {
+  const appear = useRef(new Animated.Value(isLatest ? 0 : 1)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    appear.stopAnimation();
+    pulse.stopAnimation();
+
+    if (!isLatest) {
+      Animated.parallel([
+        Animated.timing(appear, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return;
+    }
+
+    appear.setValue(0);
+    Animated.sequence([
+      Animated.timing(appear, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.back(1.8)),
+        useNativeDriver: true,
+      }),
+      Animated.timing(appear, {
+        toValue: 0.92,
+        duration: 120,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(appear, {
+        toValue: 1,
+        duration: 160,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 760,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 760,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulseAnimation.start();
+    return () => pulseAnimation.stop();
+  }, [appear, entryId, isLatest, pulse]);
+
+  const opacity = appear.interpolate({
+    inputRange: [0, 0.45, 1],
+    outputRange: [0, 1, 1],
+  });
+  const translateY = appear.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, 0],
+  });
+  const scale = appear.interpolate({
+    inputRange: [0, 0.55, 0.92, 1],
+    outputRange: [0.78, 1.12, 0.98, 1],
+  });
+  const pulseScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.045],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        style,
+        isLatest && styles.historyChipAnimatedLatest,
+        isLatest && { shadowColor: accent },
+        { opacity, transform: [{ translateY }, { scale }, { scale: pulseScale }] },
+      ]}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
@@ -1047,12 +1195,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   history: {
-    marginTop: 20,
-    maxHeight: 78,
+    marginTop: 10,
+    maxHeight: 98,
+    paddingBottom: 8,
+    paddingTop: 12,
   },
   historyContent: {
     gap: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
+    paddingTop: 2,
   },
   historyChip: {
     minWidth: 74,
@@ -1064,9 +1215,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  historyChipLatest: {
-    backgroundColor: 'rgba(0, 228, 255, 0.16)',
-    borderColor: 'rgba(0, 228, 255, 0.44)',
+  historyChipAnimatedLatest: {
+    shadowColor: '#00E4FF',
+    shadowOpacity: 0.82,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
   },
   historyKind: {
     color: '#83E9FF',

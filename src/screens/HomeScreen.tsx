@@ -22,6 +22,7 @@ import {
 import { usePlayersScore } from '../hooks/usePlayersScore';
 import { useWhoStartsGame } from '../hooks/useWhoStartsGame';
 import { ActiveScreenStorage } from '../services/ActiveScreenStorage';
+import { RollHistoryStorage, type CoinHistoryByMode } from '../services/RollHistoryStorage';
 import { CoinModeScreen } from './modes/CoinModeScreen';
 import { DiceModeScreen } from './modes/DiceModeScreen';
 import { FirstPlayerModeScreen } from './modes/FirstPlayerModeScreen';
@@ -39,6 +40,21 @@ import type {
 
 const APP_VERSION = require('../../app.json').expo.version as string;
 const INITIAL_SCREEN: AppScreen = 'first-player';
+
+function getCoinSides(mode: CoinMode): [CoinSide, CoinSide] {
+  switch (mode) {
+    case 'do-skip':
+      return ['Do', 'Skip'];
+    case 'heads-tails':
+      return ['Heads', 'Tails'];
+    case 'left-right':
+      return ['Left', 'Right'];
+    case 'odd-even':
+      return ['Odd', 'Even'];
+    case 'yes-no':
+      return ['Yes', 'No'];
+  }
+}
 
 export function HomeScreen() {
   const { width } = useWindowDimensions();
@@ -60,10 +76,11 @@ export function HomeScreen() {
   } | null>(null);
   const [coinResult, setCoinResult] = useState<CoinSide | null>(null);
   const [coinMode, setCoinMode] = useState<CoinMode>('heads-tails');
-  const [coinHistoryByMode, setCoinHistoryByMode] = useState<
-    Record<CoinMode, Array<{ id: string; result: CoinSide }>>
-  >({
+  const [coinHistoryByMode, setCoinHistoryByMode] = useState<CoinHistoryByMode>({
+    'do-skip': [],
     'heads-tails': [],
+    'left-right': [],
+    'odd-even': [],
     'yes-no': [],
   });
   const pendingCoinResultRef = useRef<{
@@ -109,6 +126,30 @@ export function HomeScreen() {
   }, [isDesktopWeb, isWeb]);
 
   useEffect(() => {
+    if (isWeb) {
+      return;
+    }
+
+    let isMounted = true;
+
+    RollHistoryStorage.loadDice().then((history) => {
+      if (isMounted) {
+        setDiceHistory(history);
+      }
+    });
+
+    RollHistoryStorage.loadCoin().then((history) => {
+      if (isMounted) {
+        setCoinHistoryByMode(history);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isWeb]);
+
+  useEffect(() => {
     if (isWeb || !hasLoadedMobileScreen) {
       return;
     }
@@ -131,7 +172,7 @@ export function HomeScreen() {
     }
 
     if (currentScreen === 'coin') {
-      return coinMode === 'heads-tails' ? 'Heads/Tails' : 'Yes/No';
+      return COIN_OPTIONS.find((option) => option.value === coinMode)?.label ?? 'Coin';
     }
 
     return currentScreenConfig.chipLabel;
@@ -251,22 +292,28 @@ export function HomeScreen() {
       return;
     }
 
-    setDiceHistory((current) => [pendingEntry, ...current].slice(0, 8));
+    setDiceHistory((current) => {
+      const nextHistory = [pendingEntry, ...current].slice(0, 10);
+      RollHistoryStorage.saveDice(nextHistory);
+      return nextHistory;
+    });
     pendingDiceResultRef.current = null;
   }
 
   function handleFlipCoin() {
-    const result: CoinSide =
-      coinMode === 'heads-tails'
-        ? Math.random() > 0.5
-          ? 'Heads'
-          : 'Tails'
-        : Math.random() > 0.5
-          ? 'Yes'
-          : 'No';
+    const [positive, negative] = getCoinSides(coinMode);
+    const result: CoinSide = Math.random() > 0.5 ? positive : negative;
     setCoinResult(result);
     pendingCoinResultRef.current = { id: `coin-${Date.now()}`, mode: coinMode, result };
     return result;
+  }
+
+  function handleCoinModeChange(direction: -1 | 1) {
+    const currentIndex = COIN_OPTIONS.findIndex((option) => option.value === coinMode);
+    const nextIndex =
+      (currentIndex + direction + COIN_OPTIONS.length) % COIN_OPTIONS.length;
+    setCoinMode(COIN_OPTIONS[nextIndex].value);
+    setCoinResult(null);
   }
 
   function handleCommitCoinResult() {
@@ -276,10 +323,14 @@ export function HomeScreen() {
       return;
     }
 
-    setCoinHistoryByMode((current) => ({
-      ...current,
-      [pendingEntry.mode]: [pendingEntry, ...current[pendingEntry.mode]].slice(0, 8),
-    }));
+    setCoinHistoryByMode((current) => {
+      const nextHistory = {
+        ...current,
+        [pendingEntry.mode]: [pendingEntry, ...current[pendingEntry.mode]].slice(0, 10),
+      };
+      RollHistoryStorage.saveCoin(nextHistory);
+      return nextHistory;
+    });
     pendingCoinResultRef.current = null;
   }
 
@@ -405,8 +456,10 @@ export function HomeScreen() {
         <CoinModeScreen
           animationsEnabled={game.settings.animations}
           contextLabel={chipLabel}
+          historyByMode={coinHistoryByMode}
           history={currentCoinHistory}
           mode={coinMode}
+          onChangeMode={handleCoinModeChange}
           onCommitFlip={handleCommitCoinResult}
           onFlip={handleFlipCoin}
           onOpenContext={() => setIsContextPickerOpen(true)}

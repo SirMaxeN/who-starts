@@ -12,6 +12,8 @@ export const STORAGE_KEY = 'whostarts.round-mode';
 export const SETTINGS_STORAGE_KEY = 'whostarts.settings';
 export const ACTIVE_SCREEN_STORAGE_KEY = 'whostarts.active-screen';
 export const SCORE_HISTORY_STORAGE_KEY = 'whostarts.score-history';
+export const DICE_HISTORY_STORAGE_KEY = 'whostarts.dice-history';
+export const COIN_HISTORY_STORAGE_KEY = 'whostarts.coin-history';
 export const PREMIUM_UNLOCKED = true;
 export const DEFAULT_SETTINGS: AppSettings = {
   animations: true,
@@ -67,6 +69,9 @@ export const DICE_OPTIONS: { label: string; value: DiceKind }[] = [
 export const COIN_OPTIONS: { label: string; value: CoinMode }[] = [
   { label: 'Heads/Tails', value: 'heads-tails' },
   { label: 'Yes/No', value: 'yes-no' },
+  { label: 'Do/Skip', value: 'do-skip' },
+  { label: 'Left/Right', value: 'left-right' },
+  { label: 'Odd/Even', value: 'odd-even' },
 ];
 
 export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
@@ -74,7 +79,7 @@ export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
     chipLabel: 'Coin',
     helpLines: [
       'Tap the center coin to flip it.',
-      'Choose between Heads / Tails or Yes / No.',
+      'Swipe or use the mode picker to change the coin type.',
       'The result lands after the flip animation finishes.',
       'Use it for quick decisions without leaving the app.',
     ],
