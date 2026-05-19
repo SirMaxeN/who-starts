@@ -3,8 +3,14 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import type { SurfaceSize, TouchPoint } from '../types/game';
 import { clamp, getTouchColor } from '../utils/game';
 
+const STANDARD_ORBIT_DURATION_MS = 7200;
+const BOOSTED_ORBIT_DURATION_MS = 1700;
+const COMPACT_MARKER_SCALE = 1 / 2.3;
+export const COMPACT_MARKER_DURATION_MS = 620;
+
 type TouchMarkerProps = {
   animationsEnabled?: boolean;
+  compact?: boolean;
   isChoosing?: boolean;
   label: string;
   surfaceSize: SurfaceSize;
@@ -14,6 +20,7 @@ type TouchMarkerProps = {
 
 export function TouchMarker({
   animationsEnabled = true,
+  compact = false,
   isChoosing = false,
   label,
   surfaceSize,
@@ -22,10 +29,27 @@ export function TouchMarker({
 }: TouchMarkerProps) {
   const color = getTouchColor(touch.id);
   const isWinner = winnerId === touch.id;
+  const compactScale = useRef(new Animated.Value(compact ? COMPACT_MARKER_SCALE : 1)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const orbit = useRef(new Animated.Value(0)).current;
   const orbitAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const boostedOrbitIdRef = useRef<string | null>(null);
   const orbitValueRef = useRef(0);
+
+  useEffect(() => {
+    if (!animationsEnabled) {
+      compactScale.stopAnimation();
+      compactScale.setValue(compact ? COMPACT_MARKER_SCALE : 1);
+      return;
+    }
+
+    Animated.timing(compactScale, {
+      toValue: compact ? COMPACT_MARKER_SCALE : 1,
+      duration: compact ? COMPACT_MARKER_DURATION_MS : 220,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [animationsEnabled, compact, compactScale]);
 
   useEffect(() => {
     const listenerId = orbit.addListener(({ value }) => {
@@ -73,11 +97,11 @@ export function TouchMarker({
 
   useEffect(() => {
     const shouldRotate = animationsEnabled || isWinner;
-    const rotationDuration = isWinner ? 2400 : 7200;
 
     if (!shouldRotate) {
       orbitAnimationRef.current?.stop();
       orbitAnimationRef.current = null;
+      boostedOrbitIdRef.current = null;
       orbitValueRef.current = 0;
       orbit.setValue(0);
       return;
@@ -85,8 +109,13 @@ export function TouchMarker({
 
     orbitAnimationRef.current?.stop();
     orbitAnimationRef.current = null;
+    const shouldBoost = isWinner && boostedOrbitIdRef.current !== winnerId;
 
-    const startOrbitLoop = (duration: number) => {
+    if (shouldBoost) {
+      boostedOrbitIdRef.current = winnerId ?? null;
+    }
+
+    const startOrbitTurn = (duration: number, nextDuration?: number) => {
       const currentValue = orbitValueRef.current;
       const nextTurn = Math.floor(currentValue) + 1;
       const remainingTurn = Math.max(0.0001, nextTurn - currentValue);
@@ -105,11 +134,14 @@ export function TouchMarker({
         }
 
         orbitValueRef.current = nextTurn;
-        startOrbitLoop(duration);
+        startOrbitTurn(nextDuration ?? duration);
       });
     };
 
-    startOrbitLoop(rotationDuration);
+    startOrbitTurn(
+      shouldBoost ? BOOSTED_ORBIT_DURATION_MS : STANDARD_ORBIT_DURATION_MS,
+      STANDARD_ORBIT_DURATION_MS
+    );
 
     return () => {
       orbitAnimationRef.current?.stop();
@@ -161,85 +193,92 @@ export function TouchMarker({
     >
       <Animated.View
         style={[
-          styles.trail,
-          {
-            backgroundColor: color,
-            opacity: trailOpacity,
-            transform: [{ rotate: orbitRotate }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.touchHalo,
-          styles.touchHaloOuter,
-          {
-            borderColor: color,
-            shadowColor: color,
-            opacity: haloOpacity,
-            transform: [{ scale: haloScale }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.touchHalo,
-          {
-            borderColor: color,
-            shadowColor: color,
-            transform: [{ scale: haloScale }],
-          },
-        ]}
-      />
-      <View style={[styles.touchCore, { backgroundColor: color }]} />
-      <Animated.View
-        style={[
-          styles.labelOrbit,
-          {
-            borderColor: `${color}55`,
-            transform: [{ rotate: orbitRotate }],
-          },
+          styles.scaleLayer,
+          { transform: [{ scale: compactScale }] },
         ]}
       >
         <Animated.View
           style={[
-            styles.labelTag,
-            styles.labelTagTop,
+            styles.trail,
             {
-              backgroundColor: `${color}22`,
-              borderColor: color,
-              transform: [{ translateY: topTagFloat }],
+              backgroundColor: color,
+              opacity: trailOpacity,
+              transform: [{ rotate: orbitRotate }],
             },
           ]}
-        >
-          <Text
-            adjustsFontSizeToFit
-            minimumFontScale={0.72}
-            numberOfLines={1}
-            style={[styles.labelText, { color }]}
-          >
-            {label}
-          </Text>
-        </Animated.View>
+        />
         <Animated.View
           style={[
-            styles.labelTag,
-            styles.labelTagBottom,
+            styles.touchHalo,
+            styles.touchHaloOuter,
             {
-              backgroundColor: `${color}18`,
               borderColor: color,
-              transform: [{ translateY: bottomTagFloat }, { rotate: '180deg' }],
+              shadowColor: color,
+              opacity: haloOpacity,
+              transform: [{ scale: haloScale }],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.touchHalo,
+            {
+              borderColor: color,
+              shadowColor: color,
+              transform: [{ scale: haloScale }],
+            },
+          ]}
+        />
+        <View style={[styles.touchCore, { backgroundColor: color }]} />
+        <Animated.View
+          style={[
+            styles.labelOrbit,
+            {
+              borderColor: `${color}55`,
+              transform: [{ rotate: orbitRotate }],
             },
           ]}
         >
-          <Text
-            adjustsFontSizeToFit
-            minimumFontScale={0.72}
-            numberOfLines={1}
-            style={[styles.labelText, { color }]}
+          <Animated.View
+            style={[
+              styles.labelTag,
+              styles.labelTagTop,
+              {
+                backgroundColor: `${color}22`,
+                borderColor: color,
+                transform: [{ translateY: topTagFloat }],
+              },
+            ]}
           >
-            {label}
-          </Text>
+            <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.72}
+              numberOfLines={1}
+              style={[styles.labelText, { color }]}
+            >
+              {label}
+            </Text>
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.labelTag,
+              styles.labelTagBottom,
+              {
+                backgroundColor: `${color}18`,
+                borderColor: color,
+                transform: [{ translateY: bottomTagFloat }, { rotate: '180deg' }],
+              },
+            ]}
+          >
+            <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.72}
+              numberOfLines={1}
+              style={[styles.labelText, { color }]}
+            >
+              {label}
+            </Text>
+          </Animated.View>
         </Animated.View>
       </Animated.View>
     </View>
@@ -249,6 +288,12 @@ export function TouchMarker({
 const styles = StyleSheet.create({
   touchWrap: {
     position: 'absolute',
+    width: 92,
+    height: 92,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scaleLayer: {
     width: 92,
     height: 92,
     alignItems: 'center',

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { RoundMode, TouchPoint } from '../types/game';
+import type { AppScreen, RoundMode, TouchPoint } from '../types/game';
 import { getModeLabel, getTouchColor } from '../utils/game';
 
 export const CENTER_PANEL_SIZE = 232;
@@ -8,21 +8,27 @@ export const CENTER_PANEL_RADIUS = CENTER_PANEL_SIZE / 2;
 
 type CenterPanelProps = {
   activeTouches: TouchPoint[];
+  awaitingRelease?: boolean;
   isChoosing: boolean;
   playerLabels: Record<string, string>;
   remainingMs: number | null;
   roundMode: RoundMode;
   onStartManualRound: () => void;
+  screen?: AppScreen;
+  selectedOrder?: TouchPoint[] | null;
   winner: TouchPoint | null;
 };
 
 export function CenterPanel({
   activeTouches,
+  awaitingRelease = false,
   isChoosing,
   onStartManualRound,
   playerLabels,
   remainingMs,
   roundMode,
+  screen = 'first-player',
+  selectedOrder = null,
   winner,
 }: CenterPanelProps) {
   const pulse = useRef(new Animated.Value(0)).current;
@@ -85,6 +91,18 @@ export function CenterPanel({
       );
     }
 
+    if (screen === 'players-order' && selectedOrder) {
+      return (
+        <>
+          <Text style={styles.centerEyebrow}>Player Order</Text>
+          <Text style={styles.centerValue}>{selectedOrder.length}</Text>
+          <Text style={styles.centerHint}>
+            {activeTouches.length > 0 ? 'Release all fingers' : 'Tap to reset'}
+          </Text>
+        </>
+      );
+    }
+
     if (roundMode === 'manual') {
       if (activeTouches.length >= 2) {
         return (
@@ -125,6 +143,16 @@ export function CenterPanel({
           <Text style={styles.centerEyebrow}>Waiting</Text>
           <Text style={styles.centerValue}>1</Text>
           <Text style={styles.centerHint}>Need one more finger</Text>
+        </>
+      );
+    }
+
+    if (screen === 'players-order') {
+      return (
+        <>
+          <Text style={styles.centerEyebrow}>Players Order</Text>
+          <Text style={styles.centerValue}>{getModeLabel(roundMode)}</Text>
+          <Text style={styles.centerHint}>Place 2+ fingers to build the full chain</Text>
         </>
       );
     }

@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -9,249 +9,392 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { CenterPanel } from '../components/CenterPanel';
 import { OverlayModal } from '../components/OverlayModal';
-import { SciFiBackdrop } from '../components/SciFiBackdrop';
-import { SelectionEffects } from '../components/SelectionEffects';
 import { TopBar } from '../components/TopBar';
-import { TouchMarker } from '../components/TouchMarker';
-import { MODE_OPTIONS } from '../constants/game';
+import {
+  APP_SCREENS,
+  DICE_OPTIONS,
+  MODE_OPTIONS,
+  PREMIUM_UNLOCKED,
+  SCREEN_ORDER,
+} from '../constants/game';
+import { usePlayersScore } from '../hooks/usePlayersScore';
 import { useWhoStartsGame } from '../hooks/useWhoStartsGame';
+import { ActiveScreenStorage } from '../services/ActiveScreenStorage';
+import { CoinModeScreen } from './modes/CoinModeScreen';
+import { DiceModeScreen } from './modes/DiceModeScreen';
+import { FirstPlayerModeScreen } from './modes/FirstPlayerModeScreen';
+import { PlayersOrderModeScreen } from './modes/PlayersOrderModeScreen';
+import { PlayersScoreModeScreen } from './modes/PlayersScoreModeScreen';
+import type {
+  AppScreen,
+  CoinSide,
+  DiceHistoryEntry,
+  DiceKind,
+  RoundMode,
+  ScreenOption,
+} from '../types/game';
 
 const APP_VERSION = require('../../app.json').expo.version as string;
+const INITIAL_SCREEN: AppScreen = 'first-player';
 
 export function HomeScreen() {
-  const { height, width } = useWindowDimensions();
-  const game = useWhoStartsGame();
-  const isCompactScreen = height < 760 || width < 390;
-  const isDesktopWeb = Platform.OS === 'web' && width >= 768;
-  const [isDesktopNoticeOpen, setIsDesktopNoticeOpen] = useState(isDesktopWeb);
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const [mobileScreen, setMobileScreen] = useState<AppScreen>(INITIAL_SCREEN);
+  const [hasLoadedMobileScreen, setHasLoadedMobileScreen] = useState(isWeb);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isDesktopNoticeOpen, setIsDesktopNoticeOpen] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [isContextPickerOpen, setIsContextPickerOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [diceKind, setDiceKind] = useState<DiceKind>('d6');
+  const [diceResult, setDiceResult] = useState<number | null>(null);
+  const [diceHistory, setDiceHistory] = useState<DiceHistoryEntry[]>([]);
+  const pendingDiceResultRef = useRef<{
+    id: string;
+    kind: DiceKind;
+    result: number;
+  } | null>(null);
+  const [coinResult, setCoinResult] = useState<CoinSide | null>(null);
+  const [coinHistory, setCoinHistory] = useState<Array<{ id: string; result: CoinSide }>>([]);
+  const currentScreen = isWeb ? 'first-player' : mobileScreen;
+  const currentScreenConfig = APP_SCREENS[currentScreen];
+  const isTouchScreen =
+    currentScreen === 'first-player' || currentScreen === 'players-order';
+  const game = useWhoStartsGame({ screen: currentScreen });
+  const score = usePlayersScore();
+  const isDesktopWeb = isWeb && width >= 768;
 
   useEffect(() => {
+    if (isWeb) {
+      setIsDesktopNoticeOpen(isDesktopWeb);
+      setHasLoadedMobileScreen(true);
+      return;
+    }
+
     if (isDesktopWeb) {
       setIsDesktopNoticeOpen(true);
       return;
     }
 
     setIsDesktopNoticeOpen(false);
-  }, [isDesktopWeb]);
-  const handleManualStart = () => {
-    game.selectWinner(game.activeTouches);
-  };
+    let isMounted = true;
+    ActiveScreenStorage.load(INITIAL_SCREEN).then((screen) => {
+      if (!isMounted) {
+        return;
+      }
 
-  const handleToggleSetting = (key: 'animations' | 'music' | 'sounds') => {
+      setMobileScreen(PREMIUM_UNLOCKED || screen === 'first-player' ? screen : 'first-player');
+      setHasLoadedMobileScreen(true);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isDesktopWeb, isWeb]);
+
+  useEffect(() => {
+    if (isWeb || !hasLoadedMobileScreen) {
+      return;
+    }
+
+    if (!PREMIUM_UNLOCKED && mobileScreen !== 'first-player') {
+      setMobileScreen('first-player');
+      return;
+    }
+
+    ActiveScreenStorage.save(mobileScreen);
+  }, [hasLoadedMobileScreen, isWeb, mobileScreen]);
+
+  const chipLabel = useMemo(() => {
+    if (currentScreen === 'first-player' || currentScreen === 'players-order') {
+      return game.roundMode === 'manual' ? 'Manual' : `${game.roundMode / 1000}s`;
+    }
+
+    if (currentScreen === 'dice') {
+      return diceKind.toUpperCase();
+    }
+
+    return currentScreenConfig.chipLabel;
+  }, [currentScreen, currentScreenConfig.chipLabel, diceKind, game.roundMode]);
+
+  const contextTitle = useMemo(() => {
+    if (currentScreen === 'dice') {
+      return 'Dice setup';
+    }
+
+    if (currentScreen === 'players-order') {
+      return 'Order setup';
+    }
+
+    if (currentScreen === 'first-player') {
+      return 'Round mode';
+    }
+
+    return currentScreenConfig.title;
+  }, [currentScreen, currentScreenConfig.title]);
+
+  const contextOptions = useMemo((): ScreenOption[] => {
+    if (currentScreen === 'dice') {
+      return DICE_OPTIONS.map((option) => ({
+        label: option.label,
+        value: option.value,
+      }));
+    }
+
+    if (currentScreen === 'first-player' || currentScreen === 'players-order') {
+      return MODE_OPTIONS.map((option) => ({
+        label: option.label,
+        value: String(option.value),
+      }));
+    }
+
+    return [];
+  }, [currentScreen]);
+
+  const currentContextValue = useMemo(() => {
+    if (currentScreen === 'dice') {
+      return diceKind;
+    }
+
+    if (currentScreen === 'first-player' || currentScreen === 'players-order') {
+      return String(game.roundMode);
+    }
+
+    return '';
+  }, [currentScreen, diceKind, game.roundMode]);
+
+  if (!hasLoadedMobileScreen) {
+    return <View style={styles.app} />;
+  }
+
+  function handleToggleSetting(key: 'animations' | 'music' | 'sounds') {
     game.setSettings((current) => ({ ...current, [key]: !current[key] }));
-  };
+  }
 
-  const handleSelectRoundMode = (value: (typeof MODE_OPTIONS)[number]['value']) => {
+  function handleSelectRoundMode(value: (typeof MODE_OPTIONS)[number]['value']) {
     game.setRoundMode(value);
-  };
+  }
 
-  return (
-    <View style={styles.app}>
-      <StatusBar style="light" />
+  function handleManualStart() {
+    game.selectWinner(game.activeTouches);
+  }
 
-      <View
-        onLayout={game.handleSurfaceLayout}
-        onTouchCancel={game.handleTouchEvent}
-        onTouchEndCapture={game.handleTouchEvent}
-        onTouchEnd={game.handleTouchEvent}
-        onTouchMove={game.handleTouchEvent}
-        onTouchStart={game.handleTouchStartEvent}
-        style={styles.surface}
-      >
-        <SciFiBackdrop animationsEnabled={game.settings.animations} />
-        <SelectionEffects
-          isChoosing={game.settings.animations && game.isChoosing}
-          winnerBurstKey={game.winnerBurstKey}
-          winner={game.settings.animations ? game.winner : null}
-        />
+  function handleSelectScreen(nextScreen: AppScreen) {
+    if (APP_SCREENS[nextScreen].premium && !PREMIUM_UNLOCKED) {
+      setIsPremiumModalOpen(true);
+      return;
+    }
 
-        {game.visibleTouches.map((touch) => (
-          <TouchMarker
-            animationsEnabled={game.settings.animations}
-            isChoosing={game.settings.animations && game.isChoosing}
-            key={touch.id}
-            label={game.playerLabels[touch.id] ?? 'Player'}
-            surfaceSize={game.surfaceSize}
-            touch={touch}
-            winnerId={game.winner?.id}
-          />
-        ))}
+    setMobileScreen(nextScreen);
+    setIsPremiumModalOpen(false);
+  }
 
-        <TopBar
-          onOpenHelp={game.openHelp}
-          onOpenModePicker={game.openRoundMode}
-          onOpenSettings={game.openSettings}
-          roundMode={game.roundMode}
-        />
+  function handleDiceKindChange(direction: -1 | 1) {
+    const currentIndex = DICE_OPTIONS.findIndex((option) => option.value === diceKind);
+    const nextIndex =
+      (currentIndex + direction + DICE_OPTIONS.length) % DICE_OPTIONS.length;
+    setDiceKind(DICE_OPTIONS[nextIndex].value);
+    setDiceResult(null);
+  }
 
-        <CenterPanel
+  function handleRollDice() {
+    const sides = Number(diceKind.slice(1));
+    const result = Math.floor(Math.random() * sides) + 1;
+    setDiceResult(result);
+    pendingDiceResultRef.current = {
+      id: `dice-${Date.now()}`,
+      kind: diceKind,
+      result,
+    };
+    return result;
+  }
+
+  function handleCommitDiceResult() {
+    const pendingEntry = pendingDiceResultRef.current;
+
+    if (!pendingEntry) {
+      return;
+    }
+
+    setDiceHistory((current) => [pendingEntry, ...current].slice(0, 8));
+    pendingDiceResultRef.current = null;
+  }
+
+  function handleFlipCoin() {
+    const result: CoinSide = Math.random() > 0.5 ? 'Heads' : 'Tails';
+    setCoinResult(result);
+    setCoinHistory((current) =>
+      [{ id: `coin-${Date.now()}`, result }, ...current].slice(0, 8)
+    );
+    return result;
+  }
+
+  function renderCurrentScreen() {
+    if (isWeb) {
+      return (
+        <FirstPlayerModeScreen
           activeTouches={game.activeTouches}
+          animationsEnabled={game.settings.animations}
+          awaitingRelease={game.awaitingRelease}
+          contextLabel={chipLabel}
           isChoosing={game.settings.animations && game.isChoosing}
+          onLayout={game.handleSurfaceLayout}
+          onOpenContext={() => setIsContextPickerOpen(true)}
+          onOpenHelp={() => setIsHelpOpen(true)}
+          onOpenPremium={() => undefined}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           onStartManualRound={handleManualStart}
+          onTouchCancel={game.handleTouchEvent}
+          onTouchEnd={game.handleTouchEvent}
+          onTouchEndCapture={game.handleTouchEvent}
+          onTouchMove={game.handleTouchEvent}
+          onTouchStart={game.handleTouchStartEvent}
           playerLabels={game.playerLabels}
           remainingMs={game.remainingMs}
           roundMode={game.roundMode}
+          showPremiumButton={false}
+          surfaceSize={game.surfaceSize}
+          visibleTouches={game.visibleTouches}
           winner={game.winner}
+          winnerBurstKey={game.winnerBurstKey}
         />
+      );
+    }
 
-        <Text pointerEvents="none" style={styles.footerHint}>
-          {game.awaitingRelease
-            ? 'Release to reset'
-            : `${game.activeTouches.length} active`}
-        </Text>
-      </View>
+    if (currentScreen === 'first-player') {
+      return (
+        <FirstPlayerModeScreen
+          activeTouches={game.activeTouches}
+          animationsEnabled={game.settings.animations}
+          awaitingRelease={game.awaitingRelease}
+          contextLabel={chipLabel}
+          isChoosing={game.settings.animations && game.isChoosing}
+          onLayout={game.handleSurfaceLayout}
+          onOpenContext={() => setIsContextPickerOpen(true)}
+          onOpenPremium={() => setIsPremiumModalOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onStartManualRound={handleManualStart}
+          onTouchCancel={game.handleTouchEvent}
+          onTouchEnd={game.handleTouchEvent}
+          onTouchEndCapture={game.handleTouchEvent}
+          onTouchMove={game.handleTouchEvent}
+          onTouchStart={game.handleTouchStartEvent}
+          playerLabels={game.playerLabels}
+          remainingMs={game.remainingMs}
+          roundMode={game.roundMode}
+          surfaceSize={game.surfaceSize}
+          visibleTouches={game.visibleTouches}
+          winner={game.winner}
+          winnerBurstKey={game.winnerBurstKey}
+        />
+      );
+    }
 
-      <OverlayModal
-        visible={game.isHelpOpen}
-        onClose={game.closeHelp}
-        onTouchStart={game.handleUiTouchStart}
-        title="How it works"
-      >
-        <Text style={styles.modalText}>Put 2 or more fingers on the screen.</Text>
-        <Text style={styles.modalText}>In timed modes, adding or removing fingers restarts the countdown.</Text>
-        <Text style={styles.modalText}>In manual mode, press START when everyone is ready.</Text>
-        <Text style={styles.modalText}>One finger wins. Release all fingers to begin again.</Text>
-      </OverlayModal>
+    if (currentScreen === 'players-order') {
+      return (
+        <PlayersOrderModeScreen
+          activeTouches={game.activeTouches}
+          animationsEnabled={game.settings.animations}
+          awaitingRelease={game.awaitingRelease}
+          contextLabel={chipLabel}
+          isChoosing={game.settings.animations && game.isChoosing}
+          onLayout={game.handleSurfaceLayout}
+          onOpenContext={() => setIsContextPickerOpen(true)}
+          onOpenPremium={() => setIsPremiumModalOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOrderRevealSound={game.playPlayerTone}
+          onStartManualRound={handleManualStart}
+          onTouchCancel={game.handleTouchEvent}
+          onTouchEnd={game.handleTouchEvent}
+          onTouchEndCapture={game.handleTouchEvent}
+          onTouchMove={game.handleTouchEvent}
+          onTouchStart={game.handleTouchStartEvent}
+          playerLabels={game.playerLabels}
+          remainingMs={game.remainingMs}
+          roundMode={game.roundMode}
+          selectedOrder={game.selectedOrder}
+          showOrderList
+          surfaceSize={game.surfaceSize}
+          visibleTouches={game.visibleTouches}
+          winner={game.winner}
+          winnerBurstKey={game.winnerBurstKey}
+        />
+      );
+    }
 
-      <OverlayModal
-        visible={game.isRoundModeOpen}
-        onClose={game.closeRoundMode}
-        onTouchStart={game.handleUiTouchStart}
-        title="Round mode"
-      >
-        <View style={styles.optionsGrid}>
-          {MODE_OPTIONS.map((option) => {
-            const isSelected = option.value === game.roundMode;
+    if (currentScreen === 'dice') {
+      return (
+        <DiceModeScreen
+          animationsEnabled={game.settings.animations}
+          contextLabel={chipLabel}
+          history={diceHistory}
+          onChangeKind={handleDiceKindChange}
+          onCommitRoll={handleCommitDiceResult}
+          onOpenContext={() => setIsContextPickerOpen(true)}
+          onOpenPremium={() => setIsPremiumModalOpen(true)}
+          onPlayChosenSound={game.playChosen}
+          onPlayChosenSoundWithRate={game.playChosenWithRate}
+          onPlayExtremeTone={game.playPlayerTone}
+          onPlayRollTickSound={game.playPress}
+          onPlaySlideSound={game.playSlide}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onRoll={handleRollDice}
+          result={diceResult}
+          roundMode={game.roundMode}
+          selectedKind={diceKind}
+        />
+      );
+    }
 
-            return (
-              <Pressable
-                key={option.label}
-                onPress={() => {
-                  handleSelectRoundMode(option.value);
-                  game.closeRoundMode();
-                }}
-                style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-              >
-                <Text
-                  style={[
-                    styles.optionButtonText,
-                    isSelected && styles.optionButtonTextSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </OverlayModal>
+    if (currentScreen === 'coin') {
+      return (
+        <CoinModeScreen
+          animationsEnabled={game.settings.animations}
+          contextLabel={chipLabel}
+          history={coinHistory}
+          onFlip={handleFlipCoin}
+          onOpenPremium={() => setIsPremiumModalOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          result={coinResult}
+          roundMode={game.roundMode}
+        />
+      );
+    }
 
-      <OverlayModal
-        visible={game.isSettingsOpen}
-        onClose={game.closeSettings}
-        onTouchStart={game.handleUiTouchStart}
-        title="Settings"
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.settingsContent,
-            isCompactScreen && styles.settingsContentCompact,
-          ]}
-          showsVerticalScrollIndicator={false}
-          style={styles.settingsScroll}
-        >
-          <Text style={[styles.sectionTitle, isCompactScreen && styles.sectionTitleCompact]}>
-            Experience
-          </Text>
-          <Pressable
-            onPress={() => handleToggleSetting('sounds')}
-            style={[styles.toggleRow, isCompactScreen && styles.toggleRowCompact]}
-          >
-            <Text style={[styles.toggleLabel, isCompactScreen && styles.toggleLabelCompact]}>
-              Sounds
-            </Text>
-            <View
-              style={[
-                styles.togglePill,
-                game.settings.sounds && styles.togglePillActive,
-              ]}
-            >
-              <View
-                style={[
-                  styles.toggleKnob,
-                  game.settings.sounds && styles.toggleKnobActive,
-                ]}
-              />
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={() => handleToggleSetting('music')}
-            style={[styles.toggleRow, isCompactScreen && styles.toggleRowCompact]}
-          >
-            <Text style={[styles.toggleLabel, isCompactScreen && styles.toggleLabelCompact]}>
-              Music
-            </Text>
-            <View
-              style={[
-                styles.togglePill,
-                game.settings.music && styles.togglePillActive,
-              ]}
-            >
-              <View
-                style={[
-                  styles.toggleKnob,
-                  game.settings.music && styles.toggleKnobActive,
-                ]}
-              />
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={() => handleToggleSetting('animations')}
-            style={[styles.toggleRow, isCompactScreen && styles.toggleRowCompact]}
-          >
-            <Text style={[styles.toggleLabel, isCompactScreen && styles.toggleLabelCompact]}>
-              Animations
-            </Text>
-            <View
-              style={[
-                styles.togglePill,
-                game.settings.animations && styles.togglePillActive,
-              ]}
-            >
-              <View
-                style={[
-                  styles.toggleKnob,
-                  game.settings.animations && styles.toggleKnobActive,
-                ]}
-              />
-            </View>
-          </Pressable>
+    return (
+      <PlayersScoreModeScreen
+        animationsEnabled={game.settings.animations}
+        contextLabel={chipLabel}
+        onOpenPremium={() => setIsPremiumModalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        roundMode={game.roundMode}
+        score={score}
+      />
+    );
+  }
 
-          <Text style={[styles.sectionTitle, isCompactScreen && styles.sectionTitleCompact]}>
-            Round mode
-          </Text>
-          <View style={[styles.optionsGrid, isCompactScreen && styles.optionsGridCompact]}>
-            {MODE_OPTIONS.map((option) => {
-              const isSelected = option.value === game.roundMode;
-
+  function renderDynamicSettingsSection() {
+    if (currentScreen === 'dice') {
+      return (
+        <>
+          <Text style={styles.sectionTitle}>Dice set</Text>
+          <View style={styles.optionsGrid}>
+            {DICE_OPTIONS.map((option) => {
+              const isSelected = option.value === diceKind;
               return (
                 <Pressable
-                  key={option.label}
+                  key={option.value}
                   onPress={() => {
-                    handleSelectRoundMode(option.value);
+                    setDiceKind(option.value);
+                    setDiceResult(null);
                   }}
-                  style={[
-                    styles.optionButton,
-                    isCompactScreen && styles.optionButtonCompact,
-                    isSelected && styles.optionButtonSelected,
-                  ]}
+                  style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                 >
                   <Text
                     style={[
                       styles.optionButtonText,
-                      isCompactScreen && styles.optionButtonTextCompact,
                       isSelected && styles.optionButtonTextSelected,
                     ]}
                   >
@@ -261,41 +404,242 @@ export function HomeScreen() {
               );
             })}
           </View>
+        </>
+      );
+    }
 
-          <Text style={[styles.sectionTitle, isCompactScreen && styles.sectionTitleCompact]}>
-            Help
+    if (currentScreen === 'first-player' || currentScreen === 'players-order') {
+      return (
+        <>
+          <Text style={styles.sectionTitle}>
+            {currentScreen === 'first-player' ? 'Round mode' : 'Order mode'}
           </Text>
-          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
-            Put 2 or more fingers on the screen.
+          <View style={styles.optionsGrid}>
+            {MODE_OPTIONS.map((option) => {
+              const isSelected = option.value === game.roundMode;
+              return (
+                <Pressable
+                  key={option.label}
+                  onPress={() => handleSelectRoundMode(option.value)}
+                  style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      isSelected && styles.optionButtonTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      );
+    }
+
+    return null;
+  }
+
+  function renderContextModalBody() {
+    if (contextOptions.length === 0) {
+      return (
+        <Text style={styles.modalText}>
+          This screen does not have extra quick options yet.
+        </Text>
+      );
+    }
+
+    return (
+      <View style={styles.optionsGrid}>
+        {contextOptions.map((option) => {
+          const isSelected = option.value === currentContextValue;
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => {
+                if (currentScreen === 'dice') {
+                  setDiceKind(option.value as DiceKind);
+                  setDiceResult(null);
+                } else {
+                  const nextMode: RoundMode =
+                    option.value === 'manual'
+                      ? 'manual'
+                      : (Number(option.value) as RoundMode);
+                  handleSelectRoundMode(nextMode);
+                }
+                setIsContextPickerOpen(false);
+              }}
+              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  isSelected && styles.optionButtonTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
+  function renderSettingsContent() {
+    return (
+      <ScrollView
+        contentContainerStyle={styles.settingsContent}
+        showsVerticalScrollIndicator={false}
+        style={styles.settingsScroll}
+      >
+        <Text style={styles.sectionTitle}>Experience</Text>
+        {(['sounds', 'music', 'animations'] as const).map((key) => (
+          <Pressable
+            key={key}
+            onPress={() => handleToggleSetting(key)}
+            style={styles.toggleRow}
+          >
+            <Text style={styles.toggleLabel}>
+              {key.charAt(0).toUpperCase() + key.slice(1)}
+            </Text>
+            <View style={[styles.togglePill, game.settings[key] && styles.togglePillActive]}>
+              <View
+                style={[styles.toggleKnob, game.settings[key] && styles.toggleKnobActive]}
+              />
+            </View>
+          </Pressable>
+        ))}
+
+        {renderDynamicSettingsSection()}
+
+        <Text style={styles.sectionTitle}>Help</Text>
+        {currentScreenConfig.helpLines.map((line) => (
+          <Text key={line} style={styles.modalText}>
+            {line}
           </Text>
-          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
-            In timed modes, adding or removing fingers restarts the countdown.
-          </Text>
-          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
-            In manual mode, press START when everyone is ready.
-          </Text>
-          <Text style={[styles.modalText, isCompactScreen && styles.modalTextCompact]}>
-            One finger wins. Release all fingers to begin again.
-          </Text>
-          <Text style={styles.creditText}>Created by SirMaxeN</Text>
-          <Text style={styles.versionText}>Version {APP_VERSION}</Text>
-        </ScrollView>
-      </OverlayModal>
+        ))}
+        <Text style={styles.creditText}>Created by SirMaxeN</Text>
+        <Text style={styles.versionText}>Version {APP_VERSION}</Text>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View style={styles.app}>
+      <StatusBar style="light" />
+      {renderCurrentScreen()}
+
+      {isWeb ? (
+        <>
+          <OverlayModal
+            visible={isHelpOpen}
+            onClose={() => setIsHelpOpen(false)}
+            onTouchStart={game.handleUiTouchStart}
+            title="How it works"
+          >
+            {APP_SCREENS['first-player'].helpLines.map((line) => (
+              <Text key={line} style={styles.modalText}>
+                {line}
+              </Text>
+            ))}
+          </OverlayModal>
+
+          <OverlayModal
+            visible={isContextPickerOpen}
+            onClose={() => setIsContextPickerOpen(false)}
+            onTouchStart={game.handleUiTouchStart}
+            title={contextTitle}
+          >
+            {renderContextModalBody()}
+          </OverlayModal>
+
+          <OverlayModal
+            visible={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onTouchStart={game.handleUiTouchStart}
+            title="Settings"
+          >
+            {renderSettingsContent()}
+          </OverlayModal>
+        </>
+      ) : (
+        <>
+          <OverlayModal
+            visible={isPremiumModalOpen}
+            onClose={() => setIsPremiumModalOpen(false)}
+            onTouchStart={isTouchScreen ? game.handleUiTouchStart : undefined}
+            title={PREMIUM_UNLOCKED ? 'Choose screen' : 'Premium'}
+          >
+            {PREMIUM_UNLOCKED ? (
+              <View style={styles.optionsGrid}>
+                {SCREEN_ORDER.map((screen) => {
+                  const isSelected = currentScreen === screen;
+                  return (
+                    <Pressable
+                      key={screen}
+                      onPress={() => handleSelectScreen(screen)}
+                      style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                    >
+                      <Text
+                        style={[
+                          styles.optionButtonText,
+                          isSelected && styles.optionButtonTextSelected,
+                        ]}
+                      >
+                        {APP_SCREENS[screen].title}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <>
+                <Text style={styles.modalText}>Premium unlocks the extra helper screens.</Text>
+                {SCREEN_ORDER.filter((screen) => APP_SCREENS[screen].premium).map((screen) => (
+                  <Text key={screen} style={styles.modalText}>
+                    {APP_SCREENS[screen].title}
+                  </Text>
+                ))}
+                <Pressable style={styles.buyButton}>
+                  <Text style={styles.buyButtonText}>Buy</Text>
+                </Pressable>
+              </>
+            )}
+          </OverlayModal>
+
+          <OverlayModal
+            visible={isContextPickerOpen}
+            onClose={() => setIsContextPickerOpen(false)}
+            onTouchStart={isTouchScreen ? game.handleUiTouchStart : undefined}
+            title={contextTitle}
+          >
+            {renderContextModalBody()}
+          </OverlayModal>
+
+          <OverlayModal
+            visible={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onTouchStart={isTouchScreen ? game.handleUiTouchStart : undefined}
+            title="Settings"
+          >
+            {renderSettingsContent()}
+          </OverlayModal>
+        </>
+      )}
 
       <OverlayModal
         visible={isDesktopNoticeOpen}
         onClose={() => setIsDesktopNoticeOpen(false)}
         title="Best on phone"
       >
-        <Text style={styles.modalText}>
-          WhoStarts? is designed mainly for mobile devices.
-        </Text>
+        <Text style={styles.modalText}>WhoStarts? is designed mainly for mobile devices.</Text>
         <Text style={styles.modalText}>
           The game works by placing multiple fingers on the screen at the same time, so desktop does not show the real experience.
         </Text>
-        <Text style={styles.modalText}>
-          Open this page on a phone
-        </Text>
+        <Text style={styles.modalText}>Open this page on a phone</Text>
       </OverlayModal>
     </View>
   );
@@ -311,22 +655,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#02030A',
     overflow: 'hidden',
   },
-  footerHint: {
-    position: 'absolute',
-    bottom: Platform.select({ web: 18, default: 34 }),
-    alignSelf: 'center',
-    color: '#8099B8',
-    fontSize: 13,
-    letterSpacing: 0.5,
-  },
   modalText: {
     color: '#AFC7DD',
     fontSize: 15,
     lineHeight: 22,
-  },
-  modalTextCompact: {
-    fontSize: 14,
-    lineHeight: 20,
   },
   sectionTitle: {
     marginTop: 8,
@@ -336,15 +668,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
-  sectionTitleCompact: {
-    marginTop: 4,
-    fontSize: 12,
-  },
   optionsGrid: {
     gap: 10,
-  },
-  optionsGridCompact: {
-    gap: 8,
   },
   settingsScroll: {
     flexGrow: 0,
@@ -352,10 +677,6 @@ const styles = StyleSheet.create({
   settingsContent: {
     gap: 12,
     paddingBottom: 8,
-  },
-  settingsContentCompact: {
-    gap: 10,
-    paddingBottom: 4,
   },
   optionButton: {
     paddingHorizontal: 16,
@@ -365,11 +686,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  optionButtonCompact: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 16,
-  },
   optionButtonSelected: {
     backgroundColor: 'rgba(0, 228, 255, 0.16)',
     borderColor: 'rgba(0, 228, 255, 0.42)',
@@ -378,9 +694,7 @@ const styles = StyleSheet.create({
     color: '#E6F4FF',
     fontSize: 16,
     fontWeight: '700',
-  },
-  optionButtonTextCompact: {
-    fontSize: 15,
+    textAlign: 'center',
   },
   optionButtonTextSelected: {
     color: '#8AF4FF',
@@ -396,18 +710,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  toggleRowCompact: {
-    minHeight: 52,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-  },
   toggleLabel: {
     color: '#E6F4FF',
     fontSize: 16,
     fontWeight: '700',
-  },
-  toggleLabelCompact: {
-    fontSize: 15,
   },
   togglePill: {
     width: 52,
@@ -443,5 +749,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.5,
     textAlign: 'center',
+  },
+  buyButton: {
+    marginTop: 12,
+    paddingVertical: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 79, 216, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 79, 216, 0.32)',
+  },
+  buyButtonText: {
+    color: '#FFF4FC',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
 });

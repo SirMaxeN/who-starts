@@ -9,25 +9,44 @@ export const TOP_BAR_CHIP_WIDTH = 118;
 export const TOP_BAR_CHIP_HEIGHT = 44;
 
 type TopBarProps = {
-  onOpenHelp: () => void;
+  contextDisabled?: boolean;
+  contextLabel: string;
+  onOpenHelp?: () => void;
+  onOpenPremium?: () => void;
   onOpenModePicker: () => void;
   onOpenSettings: () => void;
   roundMode: RoundMode;
+  showPremiumButton?: boolean;
 };
 
 export function TopBar({
+  contextDisabled = false,
+  contextLabel,
   onOpenHelp,
+  onOpenPremium,
   onOpenModePicker,
   onOpenSettings,
   roundMode,
+  showPremiumButton = false,
 }: TopBarProps) {
   return (
     <View pointerEvents="box-none" style={styles.topBar}>
-      <Pressable onPress={onOpenHelp} style={styles.iconButton}>
-        <Text style={styles.iconButtonText}>?</Text>
+      <Pressable
+        onPress={showPremiumButton ? onOpenPremium : onOpenHelp}
+        style={styles.iconButton}
+      >
+        <Text style={showPremiumButton ? styles.premiumIcon : styles.iconButtonText}>
+          {showPremiumButton ? '\u2726' : '?'}
+        </Text>
       </Pressable>
-      <Pressable onPress={onOpenModePicker} style={styles.modeChip}>
-        <Text style={styles.modeChipText}>{getModeLabel(roundMode)}</Text>
+      <Pressable
+        disabled={contextDisabled}
+        onPress={onOpenModePicker}
+        style={[styles.modeChip, contextDisabled && styles.modeChipDisabled]}
+      >
+        <Text style={styles.modeChipText}>
+          {showPremiumButton ? contextLabel : getModeLabel(roundMode)}
+        </Text>
       </Pressable>
       <Pressable onPress={onOpenSettings} style={styles.iconButton}>
         <Text style={styles.iconButtonIcon}>{'\u2699'}</Text>
@@ -45,6 +64,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    zIndex: 40,
+    elevation: 40,
   },
   iconButton: {
     width: 46,
@@ -62,6 +83,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  premiumIcon: {
+    color: '#FFE992',
+    fontSize: 22,
+    fontWeight: '800',
+    lineHeight: 26,
+    textAlign: 'center',
+    textShadowColor: 'rgba(255, 79, 216, 0.55)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
   modeChip: {
     width: TOP_BAR_CHIP_WIDTH,
     minHeight: TOP_BAR_CHIP_HEIGHT,
@@ -71,6 +102,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8, 12, 26, 0.74)',
     borderWidth: 1,
     borderColor: 'rgba(255, 79, 216, 0.26)',
+  },
+  modeChipDisabled: {
+    opacity: 0.78,
   },
   modeChipText: {
     color: '#F3FBFF',

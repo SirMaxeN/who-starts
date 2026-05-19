@@ -6,7 +6,13 @@ import type {
   NativeTouchEvent,
 } from 'react-native';
 import { AppState, Platform } from 'react-native';
-import type { AppSettings, RoundMode, SurfaceSize, TouchPoint } from '../types/game';
+import type {
+  AppScreen,
+  AppSettings,
+  RoundMode,
+  SurfaceSize,
+  TouchPoint,
+} from '../types/game';
 import { DEFAULT_SETTINGS } from '../constants/game';
 import { useMusicController } from './useMusicController';
 import { useSoundEffectsController } from './useSoundEffectsController';
@@ -24,11 +30,16 @@ const DEFAULT_MODE: RoundMode = 2000;
 const WEB_TOUCH_RECONCILE_INTERVAL_MS = 1000;
 const AWAITING_RELEASE_STALE_RESET_MS = 2000;
 
-export function useWhoStartsGame() {
+type UseWhoStartsGameParams = {
+  screen: AppScreen;
+};
+
+export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
   const [roundMode, setRoundMode] = useState<RoundMode>(DEFAULT_MODE);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [activeTouches, setActiveTouches] = useState<TouchPoint[]>([]);
   const [winner, setWinner] = useState<TouchPoint | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<TouchPoint[] | null>(null);
   const [winnerBurstKey, setWinnerBurstKey] = useState(0);
   const [awaitingRelease, setAwaitingRelease] = useState(false);
   const [countdownDeadline, setCountdownDeadline] = useState<number | null>(null);
@@ -46,8 +57,9 @@ export function useWhoStartsGame() {
   const touchFrameRef = useRef<number | null>(null);
   const latestWebTouchesRef = useRef<TouchPoint[] | null>(null);
   const lastTouchEventAtRef = useRef(Date.now());
+  const isOrderScreen = screen === 'players-order';
   const selectionState =
-    winner !== null || awaitingRelease
+    winner !== null || selectedOrder !== null || awaitingRelease
       ? 'post'
       : activeTouches.length >= 2
         ? 'pre'
@@ -64,6 +76,7 @@ export function useWhoStartsGame() {
       activeTouches.length >= 2 &&
       remainingMs !== null &&
       !winner &&
+      !selectedOrder &&
       !awaitingRelease,
     enabled: settings.sounds,
     playerCount: activeTouches.length,
@@ -276,6 +289,10 @@ export function useWhoStartsGame() {
   useEffect(() => {
     setPlayerLabels((currentLabels) => {
       if (activeTouches.length === 0) {
+        if (selectedOrder) {
+          return currentLabels;
+        }
+
         nextPlayerNumber.current = 1;
         return Object.keys(currentLabels).length === 0 ? currentLabels : {};
       }
@@ -293,28 +310,58 @@ export function useWhoStartsGame() {
 
       return hasChanges ? nextLabels : currentLabels;
     });
-  }, [activeTouches]);
+  }, [activeTouches, selectedOrder]);
 
   useEffect(() => {
     if (!awaitingRelease || activeTouches.length !== 0) {
       return;
     }
 
+    if (isOrderScreen && selectedOrder) {
+      return;
+    }
+
     setWinner(null);
+    setSelectedOrder(null);
     setAwaitingRelease(false);
-  }, [activeTouches.length, awaitingRelease]);
+  }, [activeTouches.length, awaitingRelease, isOrderScreen, selectedOrder]);
 
-  function selectWinner(sourceTouches: TouchPoint[]) {
-    if (sourceTouches.length < 2 || winner || awaitingRelease) {
+  useEffect(() => {
+    ignoredTouchIds.current.clear();
+    latestWebTouchesRef.current = [];
+    setWinner(null);
+    setSelectedOrder(null);
+    setAwaitingRelease(false);
+    setCountdownDeadline(null);
+    setRemainingMs(null);
+    queueActiveTouches([]);
+  }, [screen]);
+
+  function completeRound(sourceTouches: TouchPoint[]) {
+    if (sourceTouches.length < 2 || winner || selectedOrder || awaitingRelease) {
       return;
     }
 
-    const nextWinner = pickWinner(sourceTouches);
-    if (!nextWinner) {
-      return;
+    if (isOrderScreen) {
+      const nextOrder = [...sourceTouches]
+        .map((touch) => ({ touch, weight: Math.random() }))
+        .sort((left, right) => left.weight - right.weight)
+        .map((entry) => entry.touch);
+
+      if (nextOrder.length < 2) {
+        return;
+      }
+
+      setSelectedOrder(nextOrder);
+    } else {
+      const nextWinner = pickWinner(sourceTouches);
+      if (!nextWinner) {
+        return;
+      }
+
+      setWinner(nextWinner);
     }
 
-    setWinner(nextWinner);
     setWinnerBurstKey((current) => current + 1);
     setAwaitingRelease(true);
     setCountdownDeadline(null);
@@ -334,11 +381,12 @@ export function useWhoStartsGame() {
       remainingMs <= 0 &&
       activeTouches.length >= 2 &&
       !winner &&
+      !selectedOrder &&
       !awaitingRelease
     ) {
-      selectWinner(activeTouches);
+      completeRound(activeTouches);
     }
-  }, [activeTouches, awaitingRelease, remainingMs, roundMode, winner]);
+  }, [activeTouches, awaitingRelease, remainingMs, roundMode, selectedOrder, winner]);
 
   function handleSurfaceLayout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
@@ -354,6 +402,12 @@ export function useWhoStartsGame() {
   }
 
   function handleTouchStartEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    if (isOrderScreen && selectedOrder && awaitingRelease && activeTouchesRef.current.length === 0) {
+      setSelectedOrder(null);
+      setAwaitingRelease(false);
+      setWinnerBurstKey((current) => current + 1);
+    }
+
     registerTouchStart(event);
     handleTouchEventInternal(event, true);
   }
@@ -375,6 +429,25 @@ export function useWhoStartsGame() {
     const nextTouches = mapTouches(event);
     const currentIds = new Set(nextTouches.map((touch) => touch.id));
     const changedTouches = mapChangedTouchIds(event);
+
+    if (awaitingRelease && (winner || selectedOrder)) {
+      for (const ignoredId of Array.from(ignoredTouchIds.current)) {
+        if (!currentIds.has(ignoredId)) {
+          ignoredTouchIds.current.delete(ignoredId);
+        }
+      }
+
+      const filteredTouches = nextTouches.filter(
+        (touch) => !ignoredTouchIds.current.has(touch.id)
+      );
+
+      if (filteredTouches.length === 0) {
+        queueActiveTouches([]);
+      }
+
+      return;
+    }
+
     const knownIds = new Set([
       ...activeTouchesRef.current.map((touch) => touch.id),
       ...ignoredTouchIds.current,
@@ -398,9 +471,10 @@ export function useWhoStartsGame() {
         roundMode === 'manual' &&
         activeTouchesRef.current.length >= 2 &&
         !winner &&
+        !selectedOrder &&
         !awaitingRelease
       ) {
-        selectWinner(activeTouchesRef.current);
+        completeRound(activeTouchesRef.current);
       }
 
       if (
@@ -459,7 +533,11 @@ export function useWhoStartsGame() {
     handleUiTouchStart: registerTouchStart,
     handleSurfaceLayout,
     isChoosing:
-      settings.animations && activeTouches.length >= 2 && !winner && !awaitingRelease,
+      settings.animations &&
+      activeTouches.length >= 2 &&
+      !winner &&
+      !selectedOrder &&
+      !awaitingRelease,
     isHelpOpen,
     isRoundModeOpen,
     isSettingsOpen,
@@ -475,16 +553,22 @@ export function useWhoStartsGame() {
       soundEffects.playMenuOpen();
       setIsSettingsOpen(true);
     },
+    playChosen: soundEffects.playChosen,
+    playChosenWithRate: soundEffects.playChosenWithRate,
+    playPress: soundEffects.playPress,
+    playPlayerTone: soundEffects.playPlayerTone,
+    playSlide: soundEffects.playSlide,
     playerLabels,
     remainingMs,
     roundMode,
-    selectWinner,
+    selectedOrder,
+    selectWinner: completeRound,
     setActiveTouches,
     setRoundMode,
     setSettings,
     settings,
     surfaceSize,
-    visibleTouches: winner ? [winner] : activeTouches,
+    visibleTouches: winner ? [winner] : selectedOrder ?? activeTouches,
     winner,
     winnerBurstKey,
   };
