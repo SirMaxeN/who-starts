@@ -2,13 +2,20 @@ import { StyleSheet, View } from 'react-native';
 import { CoinScreen } from '../../components/CoinScreen';
 import { SciFiBackdrop } from '../../components/SciFiBackdrop';
 import { TopBar } from '../../components/TopBar';
-import type { CoinHistoryEntry, CoinSide, RoundMode } from '../../types/game';
+import type { CoinHistoryEntry, CoinMode, CoinSide, RoundMode } from '../../types/game';
 
 type CoinModeScreenProps = {
   animationsEnabled: boolean;
   contextLabel: string;
   history: CoinHistoryEntry[];
+  mode: CoinMode;
+  onCommitFlip: () => void;
   onFlip: () => CoinSide;
+  onOpenContext: () => void;
+  onPlayFlipResultSound?: (playbackRate?: number, volume?: number) => void;
+  onPlayFlipStartSound?: () => void;
+  onPlayFlipTickSound?: () => void;
+  onPlayFlipTone?: (playbackRate: number) => void;
   onOpenPremium: () => void;
   onOpenSettings: () => void;
   result: CoinSide | null;
@@ -19,7 +26,14 @@ export function CoinModeScreen({
   animationsEnabled,
   contextLabel,
   history,
+  mode,
+  onCommitFlip,
   onFlip,
+  onOpenContext,
+  onPlayFlipResultSound,
+  onPlayFlipStartSound,
+  onPlayFlipTickSound,
+  onPlayFlipTone,
   onOpenPremium,
   onOpenSettings,
   result,
@@ -29,15 +43,25 @@ export function CoinModeScreen({
     <View style={styles.surface}>
       <SciFiBackdrop animationsEnabled={animationsEnabled} />
       <TopBar
-        contextDisabled
         contextLabel={contextLabel}
-        onOpenModePicker={() => undefined}
+        onOpenModePicker={onOpenContext}
         onOpenPremium={onOpenPremium}
         onOpenSettings={onOpenSettings}
         roundMode={roundMode}
         showPremiumButton
       />
-      <CoinScreen history={history} onFlip={onFlip} result={result} />
+      <CoinScreen
+        animationsEnabled={animationsEnabled}
+        history={history}
+        mode={mode}
+        onCommitFlip={onCommitFlip}
+        onFlip={onFlip}
+        onFlipResultSound={onPlayFlipResultSound}
+        onFlipStartSound={onPlayFlipStartSound}
+        onFlipTickSound={onPlayFlipTickSound}
+        onFlipTone={onPlayFlipTone}
+        result={result}
+      />
     </View>
   );
 }

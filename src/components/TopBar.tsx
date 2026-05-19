@@ -44,7 +44,7 @@ export function TopBar({
         onPress={onOpenModePicker}
         style={[styles.modeChip, contextDisabled && styles.modeChipDisabled]}
       >
-        <Text style={styles.modeChipText}>
+        <Text adjustsFontSizeToFit minimumFontScale={0.68} numberOfLines={1} style={styles.modeChipText}>
           {showPremiumButton ? contextLabel : getModeLabel(roundMode)}
         </Text>
       </Pressable>

@@ -55,7 +55,9 @@ export type DiceHistoryEntry = {
   result: number;
 };
 
-export type CoinSide = 'Heads' | 'Tails';
+export type CoinMode = 'heads-tails' | 'yes-no';
+
+export type CoinSide = 'Heads' | 'Tails' | 'Yes' | 'No';
 
 export type CoinHistoryEntry = {
   id: string;

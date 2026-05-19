@@ -2,6 +2,7 @@ import type {
   AppScreen,
   AppSettings,
   BackgroundOrb,
+  CoinMode,
   DiceKind,
   RoundMode,
   ScreenConfig,
@@ -63,12 +64,18 @@ export const DICE_OPTIONS: { label: string; value: DiceKind }[] = [
   { label: 'D20', value: 'd20' },
 ];
 
+export const COIN_OPTIONS: { label: string; value: CoinMode }[] = [
+  { label: 'Heads/Tails', value: 'heads-tails' },
+  { label: 'Yes/No', value: 'yes-no' },
+];
+
 export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
   coin: {
     chipLabel: 'Coin',
     helpLines: [
       'Tap the center coin to flip it.',
-      'The result lands on Heads or Tails.',
+      'Choose between Heads / Tails or Yes / No.',
+      'The result lands after the flip animation finishes.',
       'Use it for quick decisions without leaving the app.',
     ],
     premium: true,

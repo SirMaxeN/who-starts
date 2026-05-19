@@ -13,6 +13,7 @@ import { OverlayModal } from '../components/OverlayModal';
 import { TopBar } from '../components/TopBar';
 import {
   APP_SCREENS,
+  COIN_OPTIONS,
   DICE_OPTIONS,
   MODE_OPTIONS,
   PREMIUM_UNLOCKED,
@@ -28,6 +29,7 @@ import { PlayersOrderModeScreen } from './modes/PlayersOrderModeScreen';
 import { PlayersScoreModeScreen } from './modes/PlayersScoreModeScreen';
 import type {
   AppScreen,
+  CoinMode,
   CoinSide,
   DiceHistoryEntry,
   DiceKind,
@@ -57,9 +59,21 @@ export function HomeScreen() {
     result: number;
   } | null>(null);
   const [coinResult, setCoinResult] = useState<CoinSide | null>(null);
-  const [coinHistory, setCoinHistory] = useState<Array<{ id: string; result: CoinSide }>>([]);
+  const [coinMode, setCoinMode] = useState<CoinMode>('heads-tails');
+  const [coinHistoryByMode, setCoinHistoryByMode] = useState<
+    Record<CoinMode, Array<{ id: string; result: CoinSide }>>
+  >({
+    'heads-tails': [],
+    'yes-no': [],
+  });
+  const pendingCoinResultRef = useRef<{
+    id: string;
+    mode: CoinMode;
+    result: CoinSide;
+  } | null>(null);
   const currentScreen = isWeb ? 'first-player' : mobileScreen;
   const currentScreenConfig = APP_SCREENS[currentScreen];
+  const currentCoinHistory = coinHistoryByMode[coinMode];
   const isTouchScreen =
     currentScreen === 'first-player' || currentScreen === 'players-order';
   const game = useWhoStartsGame({ screen: currentScreen });
@@ -116,8 +130,12 @@ export function HomeScreen() {
       return diceKind.toUpperCase();
     }
 
+    if (currentScreen === 'coin') {
+      return coinMode === 'heads-tails' ? 'Heads/Tails' : 'Yes/No';
+    }
+
     return currentScreenConfig.chipLabel;
-  }, [currentScreen, currentScreenConfig.chipLabel, diceKind, game.roundMode]);
+  }, [coinMode, currentScreen, currentScreenConfig.chipLabel, diceKind, game.roundMode]);
 
   const contextTitle = useMemo(() => {
     if (currentScreen === 'dice') {
@@ -126,6 +144,10 @@ export function HomeScreen() {
 
     if (currentScreen === 'players-order') {
       return 'Order setup';
+    }
+
+    if (currentScreen === 'coin') {
+      return 'Coin setup';
     }
 
     if (currentScreen === 'first-player') {
@@ -138,6 +160,13 @@ export function HomeScreen() {
   const contextOptions = useMemo((): ScreenOption[] => {
     if (currentScreen === 'dice') {
       return DICE_OPTIONS.map((option) => ({
+        label: option.label,
+        value: option.value,
+      }));
+    }
+
+    if (currentScreen === 'coin') {
+      return COIN_OPTIONS.map((option) => ({
         label: option.label,
         value: option.value,
       }));
@@ -158,12 +187,16 @@ export function HomeScreen() {
       return diceKind;
     }
 
+    if (currentScreen === 'coin') {
+      return coinMode;
+    }
+
     if (currentScreen === 'first-player' || currentScreen === 'players-order') {
       return String(game.roundMode);
     }
 
     return '';
-  }, [currentScreen, diceKind, game.roundMode]);
+  }, [coinMode, currentScreen, diceKind, game.roundMode]);
 
   if (!hasLoadedMobileScreen) {
     return <View style={styles.app} />;
@@ -223,12 +256,31 @@ export function HomeScreen() {
   }
 
   function handleFlipCoin() {
-    const result: CoinSide = Math.random() > 0.5 ? 'Heads' : 'Tails';
+    const result: CoinSide =
+      coinMode === 'heads-tails'
+        ? Math.random() > 0.5
+          ? 'Heads'
+          : 'Tails'
+        : Math.random() > 0.5
+          ? 'Yes'
+          : 'No';
     setCoinResult(result);
-    setCoinHistory((current) =>
-      [{ id: `coin-${Date.now()}`, result }, ...current].slice(0, 8)
-    );
+    pendingCoinResultRef.current = { id: `coin-${Date.now()}`, mode: coinMode, result };
     return result;
+  }
+
+  function handleCommitCoinResult() {
+    const pendingEntry = pendingCoinResultRef.current;
+
+    if (!pendingEntry) {
+      return;
+    }
+
+    setCoinHistoryByMode((current) => ({
+      ...current,
+      [pendingEntry.mode]: [pendingEntry, ...current[pendingEntry.mode]].slice(0, 8),
+    }));
+    pendingCoinResultRef.current = null;
   }
 
   function renderCurrentScreen() {
@@ -353,8 +405,15 @@ export function HomeScreen() {
         <CoinModeScreen
           animationsEnabled={game.settings.animations}
           contextLabel={chipLabel}
-          history={coinHistory}
+          history={currentCoinHistory}
+          mode={coinMode}
+          onCommitFlip={handleCommitCoinResult}
           onFlip={handleFlipCoin}
+          onOpenContext={() => setIsContextPickerOpen(true)}
+          onPlayFlipResultSound={game.playChosenWithRate}
+          onPlayFlipStartSound={game.playSlide}
+          onPlayFlipTickSound={game.playPress}
+          onPlayFlipTone={game.playPlayerTone}
           onOpenPremium={() => setIsPremiumModalOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           result={coinResult}
@@ -393,6 +452,44 @@ export function HomeScreen() {
                   style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                 >
                   <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
+                    numberOfLines={1}
+                    style={[
+                      styles.optionButtonText,
+                      isSelected && styles.optionButtonTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      );
+    }
+
+    if (currentScreen === 'coin') {
+      return (
+        <>
+          <Text style={styles.sectionTitle}>Coin mode</Text>
+          <View style={styles.optionsGrid}>
+            {COIN_OPTIONS.map((option) => {
+              const isSelected = option.value === coinMode;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    setCoinMode(option.value);
+                    setCoinResult(null);
+                  }}
+                  style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                >
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.68}
+                    numberOfLines={1}
                     style={[
                       styles.optionButtonText,
                       isSelected && styles.optionButtonTextSelected,
@@ -462,6 +559,9 @@ export function HomeScreen() {
                 if (currentScreen === 'dice') {
                   setDiceKind(option.value as DiceKind);
                   setDiceResult(null);
+                } else if (currentScreen === 'coin') {
+                  setCoinMode(option.value as CoinMode);
+                  setCoinResult(null);
                 } else {
                   const nextMode: RoundMode =
                     option.value === 'manual'
@@ -474,6 +574,9 @@ export function HomeScreen() {
               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
             >
               <Text
+                adjustsFontSizeToFit
+                minimumFontScale={0.68}
+                numberOfLines={1}
                 style={[
                   styles.optionButtonText,
                   isSelected && styles.optionButtonTextSelected,
@@ -584,6 +687,9 @@ export function HomeScreen() {
                       style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                     >
                       <Text
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.72}
+                        numberOfLines={1}
                         style={[
                           styles.optionButtonText,
                           isSelected && styles.optionButtonTextSelected,
@@ -695,6 +801,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
+    flexShrink: 1,
   },
   optionButtonTextSelected: {
     color: '#8AF4FF',
