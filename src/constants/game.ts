@@ -1,9 +1,24 @@
-import type { AppSettings, BackgroundOrb, RoundMode } from '../types/game';
+import type {
+  AppScreen,
+  AppSettings,
+  BackgroundOrb,
+  CoinMode,
+  DiceKind,
+  RoundMode,
+  ScreenConfig,
+} from '../types/game';
 
 export const STORAGE_KEY = 'whostarts.round-mode';
 export const SETTINGS_STORAGE_KEY = 'whostarts.settings';
+export const ACTIVE_SCREEN_STORAGE_KEY = 'whostarts.active-screen';
+export const SCORE_HISTORY_STORAGE_KEY = 'whostarts.score-history';
+export const DICE_HISTORY_STORAGE_KEY = 'whostarts.dice-history';
+export const COIN_HISTORY_STORAGE_KEY = 'whostarts.coin-history';
+export const PREMIUM_STORAGE_KEY = 'whostarts.premium-entitlement';
+export const PREMIUM_PRODUCT_ID = 'premium_unlock';
 export const DEFAULT_SETTINGS: AppSettings = {
   animations: true,
+  haptics: true,
   music: true,
   sounds: true,
 };
@@ -28,6 +43,19 @@ export const TOUCH_COLORS = [
   '#FF5470',
 ];
 
+export const SCORE_PLAYER_COLORS = [
+  '#00F5FF',
+  '#FF4FD8',
+  '#9B6BFF',
+  '#9DFF00',
+  '#FFB800',
+  '#FF6B3D',
+  '#4D9BFF',
+  '#FF365E',
+  '#32FF8F',
+  '#8EA0B8',
+];
+
 export const BACKGROUND_ORBS: BackgroundOrb[] = [
   { top: '8%', left: '9%', size: 120, opacity: 0.16 },
   { top: '18%', right: '10%', size: 92, opacity: 0.12 },
@@ -35,3 +63,84 @@ export const BACKGROUND_ORBS: BackgroundOrb[] = [
   { bottom: '18%', right: '5%', size: 132, opacity: 0.13 },
   { bottom: '9%', left: '18%', size: 86, opacity: 0.11 },
 ];
+
+export const SCREEN_ORDER: AppScreen[] = [
+  'first-player',
+  'players-order',
+  'dice',
+  'coin',
+  'players-score',
+];
+
+export const DICE_OPTIONS: { label: string; value: DiceKind }[] = [
+  { label: 'D4', value: 'd4' },
+  { label: 'D6', value: 'd6' },
+  { label: 'D8', value: 'd8' },
+  { label: 'D10', value: 'd10' },
+  { label: 'D12', value: 'd12' },
+  { label: 'D20', value: 'd20' },
+];
+
+export const COIN_OPTIONS: { label: string; value: CoinMode }[] = [
+  { label: 'Heads/Tails', value: 'heads-tails' },
+  { label: 'Yes/No', value: 'yes-no' },
+  { label: 'Do/Skip', value: 'do-skip' },
+  { label: 'Left/Right', value: 'left-right' },
+  { label: 'Odd/Even', value: 'odd-even' },
+];
+
+export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
+  coin: {
+    chipLabel: 'Flip',
+    helpLines: [
+      'Tap the center coin to flip it.',
+      'Swipe or use the mode picker to change the coin type.',
+      'The result lands after the flip animation finishes.',
+      'Use it for quick decisions without leaving the app.',
+    ],
+    premium: true,
+    title: 'Quick Flip',
+  },
+  dice: {
+    chipLabel: 'D6',
+    helpLines: [
+      'Swipe left or right to change the die type.',
+      'Tap the center die to roll it.',
+      'The latest results stay visible in a short session history.',
+    ],
+    premium: true,
+    title: 'Dice Roll',
+  },
+  'first-player': {
+    chipLabel: '2s',
+    helpLines: [
+      'Put 2 or more fingers on the screen.',
+      'In timed modes, adding or removing fingers restarts the countdown.',
+      'In manual mode, press START when everyone is ready.',
+      'One finger wins. Release all fingers to begin again.',
+    ],
+    premium: false,
+    title: 'Who Starts?',
+  },
+  'players-order': {
+    chipLabel: 'Order',
+    helpLines: [
+      'Put 2 or more fingers on the screen.',
+      'The round picks a full order for all players, not just one winner.',
+      'Release all fingers to prepare the next chain.',
+    ],
+    premium: true,
+    title: 'Turn Order',
+  },
+  'players-score': {
+    chipLabel: 'Score',
+    helpLines: [
+      'Add players with the + button and rename them anytime.',
+      'You can enter single values or math like 2+2*3.',
+      'Leaving a field calculates the result and updates totals instantly.',
+      'Save stores a snapshot of the current table in local history.',
+    ],
+    premium: true,
+    title: 'Scoreboard',
+  },
+};

@@ -8,8 +8,11 @@ const PLAYER_SOUND = require('../../assets/sounds/player.mp3');
 const PRESS_1_SOUND = require('../../assets/sounds/press1.mp3');
 const PRESS_2_SOUND = require('../../assets/sounds/press2.mp3');
 const PRESS_3_SOUND = require('../../assets/sounds/press3.mp3');
+const SLIDE_SOUND = require('../../assets/sounds/slide.mp3');
 const TIMER_SOUND = require('../../assets/sounds/timer.mp3');
 const PLAYER_POOL_SIZE = 6;
+const PRESS_POOL_SIZE = 4;
+const SLIDE_POOL_SIZE = 4;
 const TIMER_POOL_SIZE = 6;
 
 const PRESS_VOLUMES = [0.55, 0.55, 0.55] as const;
@@ -19,6 +22,8 @@ const PLAYER_MAX_RATE = 1.55;
 const CHOSEN_VOLUME = 0.82;
 const MENU_VOLUME = 0.5;
 const PLAYER_VOLUME = 0.68;
+const PLAYER_FEEDBACK_VOLUME = 0.82;
+const SLIDE_VOLUME = 0.62;
 const TIMER_VOLUME = 0.08;
 
 type SoundPlayer = ReturnType<typeof createAudioPlayer>;
@@ -46,9 +51,14 @@ export function useSoundEffectsController({
   const [playerJoinPlayers] = useState(() =>
     Array.from({ length: PLAYER_POOL_SIZE }, () => createAudioPlayer(PLAYER_SOUND))
   );
-  const [press1Player] = useState(() => createAudioPlayer(PRESS_1_SOUND));
-  const [press2Player] = useState(() => createAudioPlayer(PRESS_2_SOUND));
-  const [press3Player] = useState(() => createAudioPlayer(PRESS_3_SOUND));
+  const [slidePlayers] = useState(() =>
+    Array.from({ length: SLIDE_POOL_SIZE }, () => createAudioPlayer(SLIDE_SOUND))
+  );
+  const [pressPools] = useState(() => [
+    Array.from({ length: PRESS_POOL_SIZE }, () => createAudioPlayer(PRESS_1_SOUND)),
+    Array.from({ length: PRESS_POOL_SIZE }, () => createAudioPlayer(PRESS_2_SOUND)),
+    Array.from({ length: PRESS_POOL_SIZE }, () => createAudioPlayer(PRESS_3_SOUND)),
+  ]);
   const [menuPlayer] = useState(() => createAudioPlayer(MENU_SOUND));
   const [chosenPlayer] = useState(() => createAudioPlayer(CHOSEN_SOUND));
 
@@ -58,15 +68,16 @@ export function useSoundEffectsController({
   const previousCountdownActive = useRef(countdownActive);
   const playerPoolIndex = useRef(0);
   const pressIndex = useRef(0);
+  const pressPoolIndexes = useRef([0, 0, 0]);
+  const slidePoolIndex = useRef(0);
   const timerPoolIndex = useRef(0);
 
   useEffect(() => {
     const players = [
       ...timerPlayers,
       ...playerJoinPlayers,
-      press1Player,
-      press2Player,
-      press3Player,
+      ...slidePlayers,
+      ...pressPools.flat(),
       menuPlayer,
       chosenPlayer,
     ];
@@ -85,9 +96,8 @@ export function useSoundEffectsController({
     chosenPlayer,
     menuPlayer,
     playerJoinPlayers,
-    press1Player,
-    press2Player,
-    press3Player,
+    pressPools,
+    slidePlayers,
     timerPlayers,
   ]);
 
@@ -167,12 +177,14 @@ export function useSoundEffectsController({
       return;
     }
 
-    const pressPlayers = [press1Player, press2Player, press3Player];
-    const nextIndex = pressIndex.current % pressPlayers.length;
-    const player = pressPlayers[nextIndex];
+    const nextIndex = pressIndex.current % pressPools.length;
+    const pool = pressPools[nextIndex];
+    const poolIndex = pressPoolIndexes.current[nextIndex] % pool.length;
+    const player = pool[poolIndex];
 
     replaySound(player, { volume: PRESS_VOLUMES[nextIndex] });
-    pressIndex.current = (nextIndex + 1) % pressPlayers.length;
+    pressPoolIndexes.current[nextIndex] = (poolIndex + 1) % pool.length;
+    pressIndex.current = (nextIndex + 1) % pressPools.length;
   }
 
   function playMenuOpen() {
@@ -184,9 +196,51 @@ export function useSoundEffectsController({
     replaySound(menuPlayer, { volume: MENU_VOLUME });
   }
 
+  function playChosen() {
+    playChosenWithRate();
+  }
+
+  function playChosenWithRate(playbackRate = 1, volume = CHOSEN_VOLUME) {
+    if (!enabled) {
+      return;
+    }
+
+    replaySound(chosenPlayer, {
+      playbackRate,
+      shouldCorrectPitch: false,
+      volume,
+    });
+  }
+
+  function playPlayerTone(playbackRate: number) {
+    if (!enabled) {
+      return;
+    }
+
+    playPlayerJoin(playerJoinPlayers, playerPoolIndex, {
+      playbackRate,
+      shouldCorrectPitch: false,
+      volume: PLAYER_FEEDBACK_VOLUME,
+    });
+  }
+
+  function playSlide() {
+    if (!enabled) {
+      return;
+    }
+
+    const player = slidePlayers[slidePoolIndex.current % slidePlayers.length];
+    slidePoolIndex.current = (slidePoolIndex.current + 1) % slidePlayers.length;
+    replaySound(player, { volume: SLIDE_VOLUME });
+  }
+
   return {
+    playChosen,
+    playChosenWithRate,
     playMenuOpen,
+    playPlayerTone,
     playPress,
+    playSlide,
   };
 }
 

@@ -4,7 +4,9 @@ import type { TouchPoint } from '../types/game';
 import { getTouchColor } from '../utils/game';
 
 type SelectionEffectsProps = {
+  flashMaxOpacity?: number;
   isChoosing: boolean;
+  showScreenFlash?: boolean;
   winner: TouchPoint | null;
   winnerBurstKey: number;
 };
@@ -12,7 +14,9 @@ type SelectionEffectsProps = {
 const PARTICLE_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315];
 
 export function SelectionEffects({
+  flashMaxOpacity = 0.28,
   isChoosing,
+  showScreenFlash = true,
   winner,
   winnerBurstKey,
 }: SelectionEffectsProps) {
@@ -138,7 +142,7 @@ export function SelectionEffects({
   });
   const flashOpacity = flash.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.28],
+    outputRange: [0, flashMaxOpacity],
   });
 
   const winnerParticles = useMemo(() => {
@@ -151,10 +155,12 @@ export function SelectionEffects({
 
   return (
     <>
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.screenFlash, { opacity: flashOpacity, backgroundColor: winnerColor }]}
-      />
+      {showScreenFlash ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.screenFlash, { opacity: flashOpacity, backgroundColor: winnerColor }]}
+        />
+      ) : null}
 
       {isChoosing ? (
         <View pointerEvents="none" style={styles.centerFx}>
