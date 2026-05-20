@@ -1,5 +1,4 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { PREMIUM_UNLOCKED } from '../constants/game';
 import type { RoundMode } from '../types/game';
 import { getModeLabel } from '../utils/game';
 
@@ -17,6 +16,7 @@ type TopBarProps = {
   onOpenPremium?: () => void;
   onOpenModePicker: () => void;
   onOpenSettings: () => void;
+  premiumUnlocked?: boolean;
   roundMode: RoundMode;
   showPremiumButton?: boolean;
 };
@@ -28,11 +28,12 @@ export function TopBar({
   onOpenPremium,
   onOpenModePicker,
   onOpenSettings,
+  premiumUnlocked = false,
   roundMode,
   showPremiumButton = false,
 }: TopBarProps) {
-  const leftActionLabel = PREMIUM_UNLOCKED ? '' : 'Premium';
-  const leftActionIcon = PREMIUM_UNLOCKED ? '\u2630' : '\u2655';
+  const leftActionLabel = premiumUnlocked ? '' : 'Premium';
+  const leftActionIcon = premiumUnlocked ? '\u2630' : '\u2655';
 
   return (
     <View pointerEvents="box-none" style={styles.topBar}>
@@ -41,7 +42,7 @@ export function TopBar({
           onPress={showPremiumButton ? onOpenPremium : onOpenHelp}
           style={
             showPremiumButton
-              ? [styles.actionButton, PREMIUM_UNLOCKED && styles.toolsActionButton]
+              ? [styles.actionButton, premiumUnlocked && styles.toolsActionButton]
               : styles.iconButton
           }
         >
@@ -52,8 +53,8 @@ export function TopBar({
               numberOfLines={1}
               style={[
                 styles.actionButtonText,
-                PREMIUM_UNLOCKED && styles.toolsActionButtonText,
-                !PREMIUM_UNLOCKED && styles.premiumActionButtonText,
+                premiumUnlocked && styles.toolsActionButtonText,
+                !premiumUnlocked && styles.premiumActionButtonText,
               ]}
             >
               <Text style={styles.actionButtonIcon}>{leftActionIcon}</Text>

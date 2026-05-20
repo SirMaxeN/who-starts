@@ -19,6 +19,7 @@ type PlayersScoreModeScreenProps = {
   onResetHaptic?: () => void;
   onSaveHaptic?: () => void;
   onShowScore: () => void;
+  premiumUnlocked?: boolean;
   roundMode: RoundMode;
   score: ReturnType<typeof usePlayersScore>;
   view: 'history' | 'score';
@@ -38,6 +39,7 @@ export function PlayersScoreModeScreen({
   onResetHaptic,
   onSaveHaptic,
   onShowScore,
+  premiumUnlocked = false,
   roundMode,
   score,
   view,
@@ -50,6 +52,7 @@ export function PlayersScoreModeScreen({
         onOpenModePicker={onOpenViewPicker}
         onOpenPremium={onOpenPremium}
         onOpenSettings={onOpenSettings}
+        premiumUnlocked={premiumUnlocked}
         roundMode={roundMode}
         showPremiumButton
       />

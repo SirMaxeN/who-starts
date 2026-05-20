@@ -34,6 +34,7 @@ type TouchModeSurfaceProps = {
   onTouchMove: (event: any) => void;
   onTouchStart: (event: any) => void;
   playerLabels: Record<string, string>;
+  premiumUnlocked?: boolean;
   remainingMs: number | null;
   roundMode: RoundMode;
   screen: AppScreen;
@@ -68,6 +69,7 @@ export function TouchModeSurface({
   onTouchMove,
   onTouchStart,
   playerLabels,
+  premiumUnlocked = false,
   remainingMs,
   roundMode,
   screen,
@@ -223,6 +225,7 @@ export function TouchModeSurface({
         onOpenModePicker={onOpenContext}
         onOpenPremium={onOpenPremium}
         onOpenSettings={onOpenSettings}
+        premiumUnlocked={premiumUnlocked}
         roundMode={roundMode}
         showPremiumButton={showPremiumButton}
       />

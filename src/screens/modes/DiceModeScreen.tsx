@@ -18,6 +18,7 @@ type DiceModeScreenProps = {
   onPlayRollTickSound?: () => void;
   onOpenSettings: () => void;
   onRoll: () => number;
+  premiumUnlocked?: boolean;
   result: number | null;
   roundMode: RoundMode;
   selectedKind: DiceKind;
@@ -39,6 +40,7 @@ export function DiceModeScreen({
   onPlayRollTickSound,
   onOpenSettings,
   onRoll,
+  premiumUnlocked = false,
   result,
   roundMode,
   selectedKind,
@@ -65,6 +67,7 @@ export function DiceModeScreen({
         onOpenModePicker={onOpenContext}
         onOpenPremium={onOpenPremium}
         onOpenSettings={onOpenSettings}
+        premiumUnlocked={premiumUnlocked}
         roundMode={roundMode}
         showPremiumButton
       />

@@ -16,10 +16,10 @@ import {
   COIN_OPTIONS,
   DICE_OPTIONS,
   MODE_OPTIONS,
-  PREMIUM_UNLOCKED,
   SCREEN_ORDER,
 } from '../constants/game';
 import { usePlayersScore } from '../hooks/usePlayersScore';
+import { usePremiumAccess } from '../hooks/usePremiumAccess';
 import { useWhoStartsGame } from '../hooks/useWhoStartsGame';
 import { RollHistoryStorage, type CoinHistoryByMode } from '../services/RollHistoryStorage';
 import { CoinModeScreen } from './modes/CoinModeScreen';
@@ -37,7 +37,7 @@ import type {
   ScreenOption,
 } from '../types/game';
 
-const APP_VERSION = require('../../app.json').expo.version as string;
+const APP_VERSION = require('../../package.json').version as string;
 const INITIAL_SCREEN: AppScreen = 'first-player';
 
 function getCoinSides(mode: CoinMode): [CoinSide, CoinSide] {
@@ -95,7 +95,9 @@ export function HomeScreen() {
     currentScreen === 'first-player' || currentScreen === 'players-order';
   const game = useWhoStartsGame({ screen: currentScreen });
   const score = usePlayersScore();
+  const premium = usePremiumAccess();
   const isDesktopWeb = isWeb && width >= 768;
+  const premiumUnlocked = !isWeb && premium.hasPremium;
 
   useEffect(() => {
     if (isWeb) {
@@ -260,7 +262,7 @@ export function HomeScreen() {
   function handleSelectScreen(nextScreen: AppScreen) {
     game.playTapHaptic();
 
-    if (APP_SCREENS[nextScreen].premium && !PREMIUM_UNLOCKED) {
+    if (APP_SCREENS[nextScreen].premium && !premiumUnlocked) {
       setIsPremiumModalOpen(true);
       return;
     }
@@ -368,6 +370,7 @@ export function HomeScreen() {
           onTouchMove={game.handleTouchEvent}
           onTouchStart={game.handleTouchStartEvent}
           playerLabels={game.playerLabels}
+          premiumUnlocked={false}
           remainingMs={game.remainingMs}
           roundMode={game.roundMode}
           showPremiumButton={false}
@@ -398,6 +401,7 @@ export function HomeScreen() {
           onTouchMove={game.handleTouchEvent}
           onTouchStart={game.handleTouchStartEvent}
           playerLabels={game.playerLabels}
+          premiumUnlocked={premiumUnlocked}
           remainingMs={game.remainingMs}
           roundMode={game.roundMode}
           surfaceSize={game.surfaceSize}
@@ -428,6 +432,7 @@ export function HomeScreen() {
           onTouchMove={game.handleTouchEvent}
           onTouchStart={game.handleTouchStartEvent}
           playerLabels={game.playerLabels}
+          premiumUnlocked={premiumUnlocked}
           remainingMs={game.remainingMs}
           roundMode={game.roundMode}
           selectedOrder={game.selectedOrder}
@@ -457,6 +462,7 @@ export function HomeScreen() {
           onPlaySlideSound={game.playSlide}
           onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
           onRoll={handleRollDice}
+          premiumUnlocked={premiumUnlocked}
           result={diceResult}
           roundMode={game.roundMode}
           selectedKind={diceKind}
@@ -483,6 +489,7 @@ export function HomeScreen() {
           onPlaySlideSound={game.playSlide}
           onOpenPremium={() => handleTapAction(() => setIsPremiumModalOpen(true))}
           onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
+          premiumUnlocked={premiumUnlocked}
           result={coinResult}
           roundMode={game.roundMode}
         />
@@ -504,6 +511,7 @@ export function HomeScreen() {
         onResetHaptic={game.playStartHaptic}
         onSaveHaptic={handleScoreSuccess}
         onShowScore={() => setScoreboardView('score')}
+        premiumUnlocked={premiumUnlocked}
         roundMode={game.roundMode}
         score={score}
         view={scoreboardView}
@@ -744,7 +752,7 @@ export function HomeScreen() {
 
         {renderDynamicSettingsSection()}
 
-        {!isWeb && !PREMIUM_UNLOCKED ? (
+        {!isWeb && !premiumUnlocked ? (
           <>
             <Text style={styles.sectionTitle}>Premium</Text>
             <View style={styles.premiumSettingsCard}>
@@ -753,25 +761,36 @@ export function HomeScreen() {
                 Get Turn Order, Dice Roll, Quick Flip, and Scoreboard.
               </Text>
               <Pressable
-              onPress={() => {
+                disabled={premium.isBusy}
+                onPress={() => {
                   game.playTapHaptic();
-                  setIsSettingsOpen(false);
-                  setIsPremiumModalOpen(true);
+                  void premium.buyPremium();
                 }}
-                style={styles.premiumSettingsBuyButton}
+                style={[styles.premiumSettingsBuyButton, premium.isBusy && styles.buttonDisabled]}
               >
-                <Text style={styles.premiumSettingsBuyText}>Unlock Premium</Text>
+                <Text style={styles.premiumSettingsBuyText}>
+                  {premium.status === 'purchasing'
+                    ? 'Opening Google Play'
+                    : premium.priceLabel
+                      ? `Unlock ${premium.priceLabel}`
+                      : 'Unlock Premium'}
+                </Text>
               </Pressable>
               <Pressable
-              onPress={() => {
+                disabled={premium.isBusy}
+                onPress={() => {
                   game.playTapHaptic();
-                  setIsSettingsOpen(false);
-                  setIsPremiumModalOpen(true);
+                  void premium.restorePremium();
                 }}
-                style={styles.restoreButton}
+                style={[styles.restoreButton, premium.isBusy && styles.buttonDisabled]}
               >
-                <Text style={styles.restoreButtonText}>Restore Purchase</Text>
+                <Text style={styles.restoreButtonText}>
+                  {premium.status === 'restoring' ? 'Restoring' : 'Restore Purchase'}
+                </Text>
               </Pressable>
+              {premium.message ? (
+                <Text style={styles.premiumStatusText}>{premium.message}</Text>
+              ) : null}
             </View>
           </>
         ) : null}
@@ -832,9 +851,9 @@ export function HomeScreen() {
             visible={isPremiumModalOpen}
             onClose={() => setIsPremiumModalOpen(false)}
             onTouchStart={isTouchScreen ? game.handleUiTouchStart : undefined}
-            title={PREMIUM_UNLOCKED ? 'Choose Tool' : 'Unlock Helper Tools'}
+            title={premiumUnlocked ? 'Choose Tool' : 'Unlock Helper Tools'}
           >
-            {PREMIUM_UNLOCKED ? (
+            {premiumUnlocked ? (
               <View style={styles.optionsGrid}>
                 {SCREEN_ORDER.map((screen) => {
                   const isSelected = currentScreen === screen;
@@ -867,9 +886,37 @@ export function HomeScreen() {
                     {APP_SCREENS[screen].title}
                   </Text>
                 ))}
-                <Pressable style={styles.buyButton}>
-                  <Text style={styles.buyButtonText}>Buy</Text>
+                <Pressable
+                  disabled={premium.isBusy}
+                  onPress={() => {
+                    game.playTapHaptic();
+                    void premium.buyPremium();
+                  }}
+                  style={[styles.buyButton, premium.isBusy && styles.buttonDisabled]}
+                >
+                  <Text style={styles.buyButtonText}>
+                    {premium.status === 'purchasing'
+                      ? 'Opening Google Play'
+                      : premium.priceLabel
+                        ? `Buy ${premium.priceLabel}`
+                        : 'Buy'}
+                  </Text>
                 </Pressable>
+                <Pressable
+                  disabled={premium.isBusy}
+                  onPress={() => {
+                    game.playTapHaptic();
+                    void premium.restorePremium();
+                  }}
+                  style={[styles.restoreButton, premium.isBusy && styles.buttonDisabled]}
+                >
+                  <Text style={styles.restoreButtonText}>
+                    {premium.status === 'restoring' ? 'Restoring' : 'Restore Purchase'}
+                  </Text>
+                </Pressable>
+                {premium.message ? (
+                  <Text style={styles.premiumStatusText}>{premium.message}</Text>
+                ) : null}
               </>
             )}
           </OverlayModal>
@@ -1029,6 +1076,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  premiumStatusText: {
+    color: '#AFC7DD',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
   premiumSettingsBuyButton: {
     minHeight: 48,
     alignItems: 'center',
@@ -1096,5 +1149,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.1,
     textTransform: 'uppercase',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

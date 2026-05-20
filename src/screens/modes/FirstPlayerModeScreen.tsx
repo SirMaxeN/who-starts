@@ -19,6 +19,7 @@ type FirstPlayerModeScreenProps = {
   onTouchMove: (event: any) => void;
   onTouchStart: (event: any) => void;
   playerLabels: Record<string, string>;
+  premiumUnlocked?: boolean;
   remainingMs: number | null;
   roundMode: RoundMode;
   surfaceSize: SurfaceSize;

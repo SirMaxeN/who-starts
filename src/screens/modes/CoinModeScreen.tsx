@@ -21,6 +21,7 @@ type CoinModeScreenProps = {
   onPlaySlideSound?: () => void;
   onOpenPremium: () => void;
   onOpenSettings: () => void;
+  premiumUnlocked?: boolean;
   result: CoinSide | null;
   roundMode: RoundMode;
 };
@@ -42,6 +43,7 @@ export function CoinModeScreen({
   onPlaySlideSound,
   onOpenPremium,
   onOpenSettings,
+  premiumUnlocked = false,
   result,
   roundMode,
 }: CoinModeScreenProps) {
@@ -53,6 +55,7 @@ export function CoinModeScreen({
         onOpenModePicker={onOpenContext}
         onOpenPremium={onOpenPremium}
         onOpenSettings={onOpenSettings}
+        premiumUnlocked={premiumUnlocked}
         roundMode={roundMode}
         showPremiumButton
       />

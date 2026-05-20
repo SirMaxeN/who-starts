@@ -14,7 +14,8 @@ export const ACTIVE_SCREEN_STORAGE_KEY = 'whostarts.active-screen';
 export const SCORE_HISTORY_STORAGE_KEY = 'whostarts.score-history';
 export const DICE_HISTORY_STORAGE_KEY = 'whostarts.dice-history';
 export const COIN_HISTORY_STORAGE_KEY = 'whostarts.coin-history';
-export const PREMIUM_UNLOCKED = true;
+export const PREMIUM_STORAGE_KEY = 'whostarts.premium-entitlement';
+export const PREMIUM_PRODUCT_ID = 'premium_unlock';
 export const DEFAULT_SETTINGS: AppSettings = {
   animations: true,
   haptics: true,
