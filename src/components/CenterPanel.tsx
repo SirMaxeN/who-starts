@@ -8,9 +8,11 @@ import {
   type StyleProp,
   type TextStyle,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import type { AppScreen, RoundMode, TouchPoint } from '../types/game';
 import { getModeLabel, getTouchColor } from '../utils/game';
+import { getDeviceClass, getTabletScale } from '../utils/layout';
 
 export const CENTER_PANEL_SIZE = 232;
 export const CENTER_PANEL_RADIUS = CENTER_PANEL_SIZE / 2;
@@ -59,6 +61,13 @@ export function CenterPanel({
   selectedOrder = null,
   winner,
 }: CenterPanelProps) {
+  const { height, width } = useWindowDimensions();
+  const deviceClass = getDeviceClass(width, height);
+  const panelScale = getTabletScale(width, height);
+  const panelSize = CENTER_PANEL_SIZE * panelScale;
+  const panelRadius = panelSize / 2;
+  const isTablet = deviceClass !== 'phone';
+  const isLargeTablet = deviceClass === 'largeTablet';
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -218,13 +227,18 @@ export function CenterPanel({
     <Animated.View
       style={[
         styles.centerCard,
+        isTablet && styles.centerCardTablet,
+        isLargeTablet && styles.centerCardLargeTablet,
         {
+          width: panelSize,
+          minHeight: panelSize,
+          borderRadius: panelRadius,
           borderColor: animatedBorderColor,
           shadowColor: winnerColor,
           shadowOpacity: animatedShadowOpacity,
           transform: [
-            { translateX: -CENTER_PANEL_RADIUS },
-            { translateY: -CENTER_PANEL_RADIUS },
+            { translateX: -panelRadius },
+            { translateY: -panelRadius },
             { scale: animatedScale },
           ],
         },
@@ -253,6 +267,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.24,
     shadowRadius: 30,
     shadowOffset: { width: 0, height: 0 },
+  },
+  centerCardTablet: {
+    padding: 24,
+  },
+  centerCardLargeTablet: {
+    padding: 28,
   },
   centerEyebrow: {
     color: '#8FB3D8',

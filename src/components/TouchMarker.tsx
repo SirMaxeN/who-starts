@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { SurfaceSize, TouchPoint } from '../types/game';
 import { clamp, getTouchColor } from '../utils/game';
+import { getTabletScale } from '../utils/layout';
 
 const STANDARD_ORBIT_DURATION_MS = 7200;
 const BOOSTED_ORBIT_DURATION_MS = 1700;
@@ -27,6 +28,16 @@ export function TouchMarker({
   touch,
   winnerId,
 }: TouchMarkerProps) {
+  const { height, width } = useWindowDimensions();
+  const tabletScale = getTabletScale(width, height);
+  const markerSize = 92 * tabletScale;
+  const markerRadius = markerSize / 2;
+  const outerSize = 112 * tabletScale;
+  const coreSize = 26 * tabletScale;
+  const trailWidth = 22 * tabletScale;
+  const trailHeight = 138 * tabletScale;
+  const orbitSize = 132 * tabletScale;
+  const tagWidth = 88 * tabletScale;
   const color = getTouchColor(touch.id);
   const isWinner = winnerId === touch.id;
   const compactScale = useRef(new Animated.Value(compact ? COMPACT_MARKER_SCALE : 1)).current;
@@ -180,12 +191,16 @@ export function TouchMarker({
       style={[
         styles.touchWrap,
         {
+          width: markerSize,
+          height: markerSize,
+        },
+        {
           transform: [
             {
-              translateX: clamp(touch.x - 46, -12, surfaceSize.width || touch.x),
+              translateX: clamp(touch.x - markerRadius, -12, surfaceSize.width || touch.x),
             },
             {
-              translateY: clamp(touch.y - 46, -12, surfaceSize.height || touch.y),
+              translateY: clamp(touch.y - markerRadius, -12, surfaceSize.height || touch.y),
             },
           ],
         },
@@ -194,17 +209,23 @@ export function TouchMarker({
       <Animated.View
         style={[
           styles.scaleLayer,
+          {
+            width: markerSize,
+            height: markerSize,
+          },
           { transform: [{ scale: compactScale }] },
         ]}
       >
         <Animated.View
           style={[
-            styles.trail,
-            {
-              backgroundColor: color,
-              opacity: trailOpacity,
-              transform: [{ rotate: orbitRotate }],
-            },
+          styles.trail,
+          {
+            backgroundColor: color,
+            width: trailWidth,
+            height: trailHeight,
+            opacity: trailOpacity,
+            transform: [{ rotate: orbitRotate }],
+          },
           ]}
         />
         <Animated.View
@@ -213,6 +234,9 @@ export function TouchMarker({
             styles.touchHaloOuter,
             {
               borderColor: color,
+              width: outerSize,
+              height: outerSize,
+              borderRadius: outerSize / 2,
               shadowColor: color,
               opacity: haloOpacity,
               transform: [{ scale: haloScale }],
@@ -224,17 +248,33 @@ export function TouchMarker({
             styles.touchHalo,
             {
               borderColor: color,
+              width: markerSize,
+              height: markerSize,
+              borderRadius: markerRadius,
               shadowColor: color,
               transform: [{ scale: haloScale }],
             },
           ]}
         />
-        <View style={[styles.touchCore, { backgroundColor: color }]} />
+        <View
+          style={[
+            styles.touchCore,
+            {
+              backgroundColor: color,
+              width: coreSize,
+              height: coreSize,
+              borderRadius: coreSize / 2,
+            },
+          ]}
+        />
         <Animated.View
           style={[
             styles.labelOrbit,
             {
               borderColor: `${color}55`,
+              width: orbitSize,
+              height: orbitSize,
+              borderRadius: orbitSize / 2,
               transform: [{ rotate: orbitRotate }],
             },
           ]}
@@ -246,6 +286,7 @@ export function TouchMarker({
               {
                 backgroundColor: `${color}22`,
                 borderColor: color,
+                width: tagWidth,
                 transform: [{ translateY: topTagFloat }],
               },
             ]}
@@ -266,6 +307,7 @@ export function TouchMarker({
               {
                 backgroundColor: `${color}18`,
                 borderColor: color,
+                width: tagWidth,
                 transform: [{ translateY: bottomTagFloat }, { rotate: '180deg' }],
               },
             ]}

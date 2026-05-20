@@ -6,11 +6,14 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import type { CoinHistoryEntry, CoinMode, CoinSide } from '../types/game';
+import { isTabletSize } from '../utils/layout';
 
 const SkiaKit = require('@shopify/react-native-skia');
 const { BlurMask, Canvas, Circle, Group, LinearGradient, Path, Skia, vec } = SkiaKit;
+const CAN_RENDER_SKIA_PATHS = typeof Skia?.Path?.Make === 'function';
 
 type CoinScreenProps = {
   animationsEnabled: boolean;
@@ -59,6 +62,9 @@ export function CoinScreen({
   onSlideSound,
   result,
 }: CoinScreenProps) {
+  const { height, width } = useWindowDimensions();
+  const isCompactLandscape = width > height && height < 520;
+  const isTablet = isTabletSize(width, height);
   const [positiveFace, negativeFace] = getCoinModeSides(mode);
 
   const gestureStart = useRef<{ x: number; y: number } | null>(null);
@@ -445,7 +451,13 @@ export function CoinScreen({
   const nextMode = COIN_SEQUENCE[(modeIndex + 1) % COIN_SEQUENCE.length];
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        isTablet && styles.screenTablet,
+        isCompactLandscape && styles.screenCompactLandscape,
+      ]}
+    >
       <Animated.View
         pointerEvents="none"
         style={[
@@ -468,19 +480,26 @@ export function CoinScreen({
           const touch = event.nativeEvent.changedTouches[0] ?? event.nativeEvent;
           gestureStart.current = { x: touch.pageX, y: touch.pageY };
         }}
-        style={styles.coinPressable}
+        style={[
+          styles.coinPressable,
+          isTablet && styles.contentFrame,
+          isCompactLandscape && styles.coinPressableCompact,
+        ]}
       >
         <Animated.View
           pointerEvents="none"
           style={[
             styles.sideCoin,
             styles.sideCoinLeft,
+            isCompactLandscape && styles.sideCoinCompact,
             {
               opacity: leftCoinOpacity,
               transform: [
                 { translateX: leftCoinSlideX },
                 { rotate: '-12deg' },
                 { scale: leftCoinScale },
+                ...(isTablet && !isCompactLandscape ? [{ scale: 1.08 }] : []),
+                ...(isCompactLandscape ? [{ scale: 0.72 }] : []),
               ],
             },
           ]}
@@ -502,6 +521,8 @@ export function CoinScreen({
                 { rotateZ },
                 { scale },
                 { scale: mainCoinScale },
+                ...(isTablet && !isCompactLandscape ? [{ scale: 1.08 }] : []),
+                ...(isCompactLandscape ? [{ scale: 0.76 }] : []),
               ],
             },
           ]}
@@ -520,7 +541,7 @@ export function CoinScreen({
               },
             ]}
           >
-            <SkiaCoinMotionBlur color={theme.glowColor} />
+            {CAN_RENDER_SKIA_PATHS ? <SkiaCoinMotionBlur color={theme.glowColor} /> : null}
           </Animated.View>
           <Animated.View
             pointerEvents="none"
@@ -587,12 +608,15 @@ export function CoinScreen({
           style={[
             styles.sideCoin,
             styles.sideCoinRight,
+            isCompactLandscape && styles.sideCoinCompact,
             {
               opacity: rightCoinOpacity,
               transform: [
                 { translateX: rightCoinSlideX },
                 { rotate: '12deg' },
                 { scale: rightCoinScale },
+                ...(isTablet && !isCompactLandscape ? [{ scale: 1.08 }] : []),
+                ...(isCompactLandscape ? [{ scale: 0.72 }] : []),
               ],
             },
           ]}
@@ -601,10 +625,13 @@ export function CoinScreen({
         </Animated.View>
       </View>
 
-      <Text style={styles.coinLabel}>{getCoinModeLabel(mode)}</Text>
+      <Text style={[styles.coinLabel, isCompactLandscape && styles.coinLabelCompact]}>
+        {getCoinModeLabel(mode)}
+      </Text>
       <Text
         style={[
           styles.coinResult,
+          isCompactLandscape && styles.coinResultCompact,
           isPositiveFace(currentFace)
             ? styles.coinResultPositive
             : styles.coinResultNegative,
@@ -617,7 +644,11 @@ export function CoinScreen({
         contentContainerStyle={styles.historyContent}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.history}
+        style={[
+          styles.history,
+          isTablet && styles.contentFrame,
+          isCompactLandscape && styles.historyCompact,
+        ]}
       >
         {history.length === 0 ? (
           <Text style={styles.emptyHistory}>No flips yet</Text>
@@ -865,6 +896,10 @@ function createCoinWobble() {
 }
 
 function SkiaCoinMotionBlur({ color }: { color: string }) {
+  if (!CAN_RENDER_SKIA_PATHS) {
+    return null;
+  }
+
   const path = Skia.Path.Make();
   path.moveTo(18, 23);
   path.cubicTo(52, 0, 176, 0, 210, 23);
@@ -886,6 +921,23 @@ function SkiaCoinMotionBlur({ color }: { color: string }) {
 }
 
 function SkiaCoinFaceArt({ side, theme }: { side: CoinSide; theme: CoinFaceTheme }) {
+  if (!CAN_RENDER_SKIA_PATHS) {
+    return (
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          styles.coinFaceArtFallback,
+          {
+            backgroundColor: theme.faceColor,
+            borderColor: theme.borderColor,
+            shadowColor: theme.glowColor,
+          },
+        ]}
+      />
+    );
+  }
+
   const orbitA = Skia.Path.Make();
   orbitA.moveTo(38, 116);
   orbitA.cubicTo(72, 58, 152, 56, 188, 110);
@@ -1365,6 +1417,12 @@ const styles = StyleSheet.create({
     paddingTop: 140,
     alignItems: 'center',
   },
+  screenTablet: {
+    paddingTop: 122,
+  },
+  screenCompactLandscape: {
+    paddingTop: 82,
+  },
   coinScreenFlash: {
     ...StyleSheet.absoluteFillObject,
   },
@@ -1383,12 +1441,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  contentFrame: {
+    maxWidth: 760,
+  },
+  coinPressableCompact: {
+    marginTop: 6,
+    height: 176,
+  },
   sideCoin: {
     position: 'absolute',
     top: 82,
     width: 104,
     height: 104,
     zIndex: 0,
+  },
+  sideCoinCompact: {
+    top: 44,
   },
   sideCoinLeft: {
     left: 2,
@@ -1507,6 +1575,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  coinFaceArtFallback: {
+    borderRadius: 113,
+    borderWidth: 2,
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+  },
   coinFaceTitle: {
     position: 'absolute',
     top: 30,
@@ -1529,6 +1604,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
+  coinLabelCompact: {
+    marginTop: 0,
+  },
   coinResult: {
     marginTop: 8,
     fontSize: 34,
@@ -1536,6 +1614,10 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(255, 255, 255, 0.24)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 16,
+  },
+  coinResultCompact: {
+    marginTop: 3,
+    fontSize: 28,
   },
   coinResultPositive: {
     color: '#CFFFF0',
@@ -1586,6 +1668,12 @@ const styles = StyleSheet.create({
     maxHeight: 94,
     paddingBottom: 8,
     paddingTop: 12,
+  },
+  historyCompact: {
+    marginTop: 6,
+    maxHeight: 64,
+    paddingBottom: 2,
+    paddingTop: 4,
   },
   historyContent: {
     gap: 10,

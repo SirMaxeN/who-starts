@@ -10,10 +10,12 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SCORE_PLAYER_COLORS } from '../constants/game';
 import type { ScoreEntry, ScoreHistorySnapshot, ScorePlayer } from '../types/game';
 import type { ParsedExpression } from '../utils/expression';
+import { isTabletSize } from '../utils/layout';
 
 type ScoreboardView = 'history' | 'score';
 
@@ -89,6 +91,10 @@ export function PlayersScoreScreen({
   players,
   view,
 }: PlayersScoreScreenProps) {
+  const { height, width } = useWindowDimensions();
+  const isLandscape = width > height;
+  const isCompactLandscape = isLandscape && height < 520;
+  const isTablet = isTabletSize(width, height);
   const activePlayer =
     players.find((player) => player.id === activePlayerId) ?? players[0] ?? null;
   const sortedPlayers = useMemo(
@@ -342,7 +348,7 @@ export function PlayersScoreScreen({
   function renderScoreView() {
     return (
       <>
-        <View style={styles.header}>
+        <View style={[styles.header, isTablet && styles.contentFrame]}>
           <Text style={styles.eyebrow}>Scoreboard</Text>
           <View style={styles.headerActions}>
             <Pressable
@@ -401,7 +407,7 @@ export function PlayersScoreScreen({
             horizontal
             ref={playersRailRef}
             showsHorizontalScrollIndicator={false}
-            style={styles.playersRail}
+            style={[styles.playersRail, isTablet && styles.contentFrame]}
           >
             {players.map((player) => (
               <PlayerTile
@@ -429,6 +435,7 @@ export function PlayersScoreScreen({
           <Animated.View
             style={[
               styles.scoreBody,
+              isTablet && styles.contentFrame,
               {
                 opacity: saveFly.interpolate({
                   inputRange: [0, 0.62, 1],
@@ -574,7 +581,13 @@ export function PlayersScoreScreen({
 
     return (
       <View style={styles.historyView}>
-        <View style={styles.header}>
+        <View
+          style={[
+            styles.header,
+            isTablet && styles.contentFrame,
+            isCompactLandscape && styles.headerCompact,
+          ]}
+        >
           <Text style={styles.eyebrow}>History</Text>
           <Text style={styles.historyCounter}>
             {history.length === 0 ? '0 / 0' : `${historyIndex + 1} / ${history.length}`}
@@ -606,6 +619,8 @@ export function PlayersScoreScreen({
             }}
             style={[
               styles.historyCard,
+              isTablet && styles.historyCardTablet,
+              isCompactLandscape && styles.historyCardCompact,
               { opacity: slideOpacity, transform: [{ translateX: slideX }] },
             ]}
           >
@@ -613,17 +628,30 @@ export function PlayersScoreScreen({
               adjustsFontSizeToFit
               minimumFontScale={0.58}
               numberOfLines={1}
-              style={styles.historyName}
+              style={[styles.historyName, isCompactLandscape && styles.historyNameCompact]}
             >
               {visibleHistory.name}
             </Text>
-            <Text style={styles.historyDate}>
+            <Text style={[styles.historyDate, isCompactLandscape && styles.historyDateCompact]}>
               {new Date(visibleHistory.createdAt).toLocaleString()}
             </Text>
-            <View style={styles.historyPlayersMask}>
-              <ScrollView contentContainerStyle={styles.historyPlayers}>
+            <View style={[styles.historyPlayersMask, isCompactLandscape && styles.historyPlayersMaskCompact]}>
+              <ScrollView
+                contentContainerStyle={[
+                  styles.historyPlayers,
+                  isCompactLandscape && styles.historyPlayersCompact,
+                ]}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
               {visibleHistory.players.map((player) => (
-                <View key={`${visibleHistory.id}-${player.id}`} style={styles.historyPlayerRow}>
+                <View
+                  key={`${visibleHistory.id}-${player.id}`}
+                  style={[
+                    styles.historyPlayerRow,
+                    isCompactLandscape && styles.historyPlayerRowCompact,
+                  ]}
+                >
                   <View style={[styles.historyRank, { borderColor: player.color }]}>
                     <Text style={styles.historyRankText}>
                       #{getCompetitionPlace(visibleHistory.players, player)}
@@ -637,19 +665,19 @@ export function PlayersScoreScreen({
                 ))}
               </ScrollView>
             </View>
-            <View style={styles.historyActions}>
+            <View style={[styles.historyActions, isCompactLandscape && styles.historyActionsCompact]}>
               <Pressable
                 onPress={() => {
                   onEditHistorySnapshot(visibleHistory.id);
                   onSuccess?.();
                 }}
-                style={styles.historyActionButton}
+                style={[styles.historyActionButton, isCompactLandscape && styles.historyActionButtonCompact]}
               >
                 <Text style={styles.historyActionText}>Edit</Text>
               </Pressable>
               <Pressable
                 onPress={() => openEditSnapshot(visibleHistory)}
-                style={styles.historyRenameButton}
+                style={[styles.historyRenameButton, isCompactLandscape && styles.historyActionButtonCompact]}
               >
                 <Text style={styles.historyActionText}>Rename</Text>
               </Pressable>
@@ -662,7 +690,11 @@ export function PlayersScoreScreen({
                     title: 'Delete snapshot?',
                   })
                 }
-                style={[styles.historyIconButton, styles.historyTrashButton]}
+                style={[
+                  styles.historyIconButton,
+                  styles.historyTrashButton,
+                  isCompactLandscape && styles.historyIconButtonCompact,
+                ]}
               >
                 <Text style={styles.historyIconText}>🗑</Text>
               </Pressable>
@@ -681,7 +713,7 @@ export function PlayersScoreScreen({
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.screen}
+      style={[styles.screen, isCompactLandscape && styles.screenCompactLandscape]}
     >
       {view === 'history' ? renderHistoryView() : renderScoreView()}
       <EditPlayerModal
@@ -1045,12 +1077,25 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 108,
     paddingBottom: 18,
+    alignItems: 'center',
+  },
+  screenCompactLandscape: {
+    paddingTop: 82,
+    paddingBottom: 8,
   },
   header: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 18,
+  },
+  contentFrame: {
+    width: '100%',
+    maxWidth: 760,
+  },
+  headerCompact: {
+    paddingHorizontal: 14,
   },
   eyebrow: {
     color: '#88B4D9',
@@ -1192,6 +1237,10 @@ const styles = StyleSheet.create({
     color: '#8AF4FF',
     fontSize: 25,
     fontWeight: '700',
+    includeFontPadding: false,
+    lineHeight: 30,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   scoreContent: {
     paddingHorizontal: 18,
@@ -1239,7 +1288,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     includeFontPadding: false,
-    lineHeight: 19,
+    lineHeight: 28,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    width: '100%',
   },
   activeLabel: {
     color: '#8FB3D8',
@@ -1403,6 +1455,8 @@ const styles = StyleSheet.create({
   },
   historyView: {
     flex: 1,
+    width: '100%',
+    alignItems: 'center',
   },
   historyCounter: {
     color: '#8FB3D8',
@@ -1410,7 +1464,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   historyCard: {
+    width: '100%',
     flex: 1,
+    minHeight: 0,
     marginHorizontal: 18,
     marginTop: 18,
     marginBottom: 28,
@@ -1419,6 +1475,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8, 14, 30, 0.86)',
     borderWidth: 1,
     borderColor: 'rgba(95, 230, 255, 0.24)',
+  },
+  historyCardTablet: {
+    maxWidth: 760,
+  },
+  historyCardCompact: {
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 10,
+    borderRadius: 22,
+    padding: 12,
   },
   historyName: {
     width: '100%',
@@ -1429,6 +1495,10 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     textAlign: 'center',
   },
+  historyNameCompact: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
   historyDate: {
     color: '#BFD9EE',
     fontSize: 12,
@@ -1436,15 +1506,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
   },
+  historyDateCompact: {
+    marginTop: 3,
+    fontSize: 11,
+  },
   historyPlayersMask: {
     flex: 1,
+    minHeight: 0,
     marginTop: 16,
     marginBottom: 60,
     overflow: 'hidden',
   },
+  historyPlayersMaskCompact: {
+    marginTop: 8,
+    marginBottom: 44,
+  },
   historyPlayers: {
     gap: 10,
     paddingBottom: 12,
+  },
+  historyPlayersCompact: {
+    gap: 6,
+    paddingBottom: 8,
   },
   historyPlayerRow: {
     minHeight: 50,
@@ -1454,6 +1537,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  historyPlayerRowCompact: {
+    minHeight: 38,
+    borderRadius: 14,
+    paddingHorizontal: 10,
   },
   historyRank: {
     width: 34,
@@ -1487,6 +1575,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 10,
   },
+  historyActionsCompact: {
+    right: 12,
+    bottom: 12,
+    left: 12,
+    gap: 8,
+  },
   historyActionButton: {
     minWidth: 92,
     height: 48,
@@ -1496,6 +1590,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 228, 255, 0.14)',
     borderWidth: 1,
     borderColor: 'rgba(0, 228, 255, 0.36)',
+  },
+  historyActionButtonCompact: {
+    minWidth: 78,
+    height: 36,
+    borderRadius: 18,
   },
   historyActionText: {
     color: '#CFFFFF',
@@ -1513,6 +1612,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  historyIconButtonCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   historyRenameButton: {
     minWidth: 104,
@@ -1532,6 +1636,15 @@ const styles = StyleSheet.create({
     color: '#EAF7FF',
     fontSize: 18,
     fontWeight: '900',
+    includeFontPadding: false,
+    lineHeight: 48,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    width: '100%',
+  },
+  historyIconTextCompact: {
+    fontSize: 15,
+    lineHeight: 36,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

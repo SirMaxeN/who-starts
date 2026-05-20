@@ -39,6 +39,8 @@ import type {
 
 const APP_VERSION = require('../../package.json').version as string;
 const INITIAL_SCREEN: AppScreen = 'first-player';
+const WEB_SCREENSHOT_MODE =
+  __DEV__ && process.env.EXPO_PUBLIC_ENABLE_WEB_SCREENSHOT_MODE === 'true';
 
 function getCoinSides(mode: CoinMode): [CoinSide, CoinSide] {
   switch (mode) {
@@ -88,7 +90,7 @@ export function HomeScreen() {
     mode: CoinMode;
     result: CoinSide;
   } | null>(null);
-  const currentScreen = isWeb ? 'first-player' : mobileScreen;
+  const currentScreen = isWeb && !WEB_SCREENSHOT_MODE ? 'first-player' : mobileScreen;
   const currentScreenConfig = APP_SCREENS[currentScreen];
   const currentCoinHistory = coinHistoryByMode[coinMode];
   const isTouchScreen =
@@ -97,10 +99,10 @@ export function HomeScreen() {
   const score = usePlayersScore();
   const premium = usePremiumAccess();
   const isDesktopWeb = isWeb && width >= 768;
-  const premiumUnlocked = !isWeb && premium.hasPremium;
+  const premiumUnlocked = WEB_SCREENSHOT_MODE || (!isWeb && premium.hasPremium);
 
   useEffect(() => {
-    if (isWeb) {
+    if (isWeb && !WEB_SCREENSHOT_MODE) {
       setIsDesktopNoticeOpen(isDesktopWeb);
       setHasLoadedMobileScreen(true);
       return;
@@ -117,7 +119,7 @@ export function HomeScreen() {
   }, [isDesktopWeb, isWeb]);
 
   useEffect(() => {
-    if (isWeb) {
+    if (isWeb && !WEB_SCREENSHOT_MODE) {
       return;
     }
 
@@ -350,7 +352,7 @@ export function HomeScreen() {
   }
 
   function renderCurrentScreen() {
-    if (isWeb) {
+    if (isWeb && !WEB_SCREENSHOT_MODE) {
       return (
         <FirstPlayerModeScreen
           activeTouches={game.activeTouches}
@@ -812,7 +814,7 @@ export function HomeScreen() {
       <StatusBar style="light" />
       {renderCurrentScreen()}
 
-      {isWeb ? (
+      {isWeb && !WEB_SCREENSHOT_MODE ? (
         <>
           <OverlayModal
             visible={isHelpOpen}

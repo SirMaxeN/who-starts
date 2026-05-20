@@ -8,7 +8,7 @@ module.exports = {
     experiments: {
       baseUrl: '/games/whostarts',
     },
-    orientation: 'portrait',
+    orientation: 'default',
     icon: './assets/icon.png',
     userInterfaceStyle: 'dark',
     splash: {

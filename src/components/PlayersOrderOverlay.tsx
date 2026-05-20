@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { TouchPoint } from '../types/game';
 import { getTouchColor } from '../utils/game';
+import { isTabletSize } from '../utils/layout';
 
 const SkiaKit = require('@shopify/react-native-skia');
 const { BlurMask, Canvas, LinearGradient, Path, Skia, vec } = SkiaKit;
@@ -81,12 +82,15 @@ export function PlayersOrderPanel({
   order,
   playerLabels,
 }: Pick<PlayersOrderOverlayProps, 'order' | 'playerLabels'>) {
+  const { height, width } = useWindowDimensions();
+  const isTablet = isTabletSize(width, height);
+
   if (!order || order.length < 1) {
     return null;
   }
 
   return (
-    <View pointerEvents="none" style={styles.orderList}>
+    <View pointerEvents="none" style={[styles.orderList, isTablet && styles.orderListTablet]}>
       <Text style={styles.orderTitle}>Player Order</Text>
       <View style={styles.orderColumns}>
         {[order.slice(0, 5), order.slice(5, 10)].map((column, columnIndex) => (
@@ -491,6 +495,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.32,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 0 },
+  },
+  orderListTablet: {
+    alignSelf: 'center',
+    left: undefined,
+    right: undefined,
+    width: '72%',
+    maxWidth: 680,
+    bottom: 64,
   },
   orderColumns: {
     flexDirection: 'row',

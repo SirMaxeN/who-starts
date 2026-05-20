@@ -6,8 +6,10 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import type { DiceHistoryEntry, DiceKind } from '../types/game';
+import { isTabletSize } from '../utils/layout';
 
 type DiceScreenProps = {
   animationsEnabled: boolean;
@@ -96,6 +98,9 @@ export function DiceScreen({
   result,
   selectedKind,
 }: DiceScreenProps) {
+  const { height, width } = useWindowDimensions();
+  const isCompactLandscape = width > height && height < 520;
+  const isTablet = isTabletSize(width, height);
   const gestureStart = useRef<{ x: number; y: number } | null>(null);
   const rollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const rollProgress = useRef(new Animated.Value(0)).current;
@@ -359,7 +364,13 @@ export function DiceScreen({
   }
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        isTablet && styles.screenTablet,
+        isCompactLandscape && styles.screenCompactLandscape,
+      ]}
+    >
       <Animated.View
         pointerEvents="none"
         style={[
@@ -377,18 +388,25 @@ export function DiceScreen({
           const touch = event.nativeEvent.changedTouches[0] ?? event.nativeEvent;
           gestureStart.current = { x: touch.pageX, y: touch.pageY };
         }}
-        style={styles.carouselWrap}
+        style={[
+          styles.carouselWrap,
+          isTablet && styles.contentFrame,
+          isCompactLandscape && styles.carouselWrapCompact,
+        ]}
       >
         <Animated.View
           style={[
             styles.sideDie,
             styles.sideDieLeft,
+            isCompactLandscape && styles.sideDieCompact,
             {
               opacity: leftDieOpacity,
               transform: [
                 { translateX: leftDieSlideX },
                 { rotate: '-12deg' },
                 { scale: leftDieScale },
+                ...(isTablet && !isCompactLandscape ? [{ scale: 1.08 }] : []),
+                ...(isCompactLandscape ? [{ scale: 0.72 }] : []),
               ],
             },
           ]}
@@ -399,6 +417,7 @@ export function DiceScreen({
         <Animated.View
           style={[
             styles.mainDieAnimated,
+            isCompactLandscape && styles.mainDieAnimatedCompact,
             {
               opacity: mainDieOpacity,
               transform: [
@@ -409,6 +428,8 @@ export function DiceScreen({
                 { rotate: rollWobble },
                 { scale: rollScale },
                 { scale: mainDieScale },
+                ...(isTablet && !isCompactLandscape ? [{ scale: 1.08 }] : []),
+                ...(isCompactLandscape ? [{ scale: 0.72 }] : []),
               ],
             },
           ]}
@@ -426,12 +447,15 @@ export function DiceScreen({
           style={[
             styles.sideDie,
             styles.sideDieRight,
+            isCompactLandscape && styles.sideDieCompact,
             {
               opacity: rightDieOpacity,
               transform: [
                 { translateX: rightDieSlideX },
                 { rotate: '12deg' },
                 { scale: rightDieScale },
+                ...(isTablet && !isCompactLandscape ? [{ scale: 1.08 }] : []),
+                ...(isCompactLandscape ? [{ scale: 0.72 }] : []),
               ],
             },
           ]}
@@ -447,7 +471,11 @@ export function DiceScreen({
         contentContainerStyle={styles.historyContent}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.history}
+        style={[
+          styles.history,
+          isTablet && styles.contentFrame,
+          isCompactLandscape && styles.historyCompact,
+        ]}
       >
         {history.length === 0 ? (
           <Text style={styles.emptyHistory}>No rolls yet</Text>
@@ -780,6 +808,14 @@ const styles = StyleSheet.create({
     paddingBottom: 56,
     alignItems: 'center',
   },
+  screenTablet: {
+    paddingTop: 120,
+    paddingBottom: 42,
+  },
+  screenCompactLandscape: {
+    paddingTop: 82,
+    paddingBottom: 16,
+  },
   diceScreenFlash: {
     ...StyleSheet.absoluteFillObject,
   },
@@ -797,12 +833,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  contentFrame: {
+    maxWidth: 760,
+  },
+  carouselWrapCompact: {
+    marginTop: 6,
+    minHeight: 190,
+  },
   mainDieAnimated: {
     width: 244,
     height: 286,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 4,
+  },
+  mainDieAnimatedCompact: {
+    width: 176,
+    height: 206,
   },
   resultBurstWrap: {
     position: 'absolute',
@@ -846,6 +893,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     opacity: 0.28,
     zIndex: 1,
+  },
+  sideDieCompact: {
+    top: 38,
+    width: 92,
+    height: 112,
   },
   sideDieLeft: {
     left: -10,
@@ -1199,6 +1251,12 @@ const styles = StyleSheet.create({
     maxHeight: 98,
     paddingBottom: 8,
     paddingTop: 12,
+  },
+  historyCompact: {
+    marginTop: 4,
+    maxHeight: 68,
+    paddingBottom: 2,
+    paddingTop: 4,
   },
   historyContent: {
     gap: 10,

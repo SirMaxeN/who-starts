@@ -29,6 +29,8 @@ import {
 const DEFAULT_MODE: RoundMode = 2000;
 const WEB_TOUCH_RECONCILE_INTERVAL_MS = 1000;
 const AWAITING_RELEASE_STALE_RESET_MS = 2000;
+const WEB_DEV_TOUCH_KEYS = new Set(['1', '2', '3', '4', '5', '6']);
+const WEB_DEV_RESET_TOUCH_KEY = '0';
 
 type UseWhoStartsGameParams = {
   screen: AppScreen;
@@ -56,6 +58,9 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
   const pendingTouchesRef = useRef<TouchPoint[] | null>(null);
   const touchFrameRef = useRef<number | null>(null);
   const latestWebTouchesRef = useRef<TouchPoint[] | null>(null);
+  const webDevTouchKeyRef = useRef<string | null>(null);
+  const webDevPressedKeysRef = useRef<string[]>([]);
+  const webDevTouchesRef = useRef<TouchPoint[]>([]);
   const lastTouchEventAtRef = useRef(Date.now());
   const isOrderScreen = screen === 'players-order';
   const selectionState =
@@ -129,6 +134,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
 
       ignoredTouchIds.current.clear();
       latestWebTouchesRef.current = [];
+      webDevTouchesRef.current = [];
       queueActiveTouches([]);
     }, 250);
 
@@ -147,6 +153,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     const handleAppBlur = () => {
       ignoredTouchIds.current.clear();
       latestWebTouchesRef.current = [];
+      webDevTouchesRef.current = [];
       queueActiveTouches([]);
     };
 
@@ -179,14 +186,28 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
         .sort((left, right) => left.id.localeCompare(right.id));
 
     const updateWebTouches = (touches: TouchPoint[]) => {
+      if (webDevTouchesRef.current.length > 0) {
+        return;
+      }
+
       latestWebTouchesRef.current = touches;
     };
 
     const handleWindowTouch = (event: TouchEvent) => {
+      if (webDevTouchesRef.current.length > 0) {
+        event.preventDefault();
+        return;
+      }
+
       updateWebTouches(mapWebTouches(event.touches));
     };
 
     const clearWebTouches = () => {
+      if (__DEV__ && webDevTouchesRef.current.length > 0) {
+        return;
+      }
+
+      webDevTouchesRef.current = [];
       updateWebTouches([]);
       ignoredTouchIds.current.clear();
       queueActiveTouches([]);
@@ -198,15 +219,19 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
       }
     };
 
-    window.addEventListener('touchstart', handleWindowTouch, { passive: true });
-    window.addEventListener('touchmove', handleWindowTouch, { passive: true });
-    window.addEventListener('touchend', handleWindowTouch, { passive: true });
-    window.addEventListener('touchcancel', handleWindowTouch, { passive: true });
+    window.addEventListener('touchstart', handleWindowTouch, { passive: false });
+    window.addEventListener('touchmove', handleWindowTouch, { passive: false });
+    window.addEventListener('touchend', handleWindowTouch, { passive: false });
+    window.addEventListener('touchcancel', handleWindowTouch, { passive: false });
     window.addEventListener('blur', clearWebTouches);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const reconcileTimer = window.setInterval(() => {
       const webTouches = latestWebTouchesRef.current;
+
+      if (webDevTouchesRef.current.length > 0) {
+        return;
+      }
 
       if (webTouches === null) {
         return;
@@ -237,6 +262,109 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
       window.removeEventListener('blur', clearWebTouches);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.clearInterval(reconcileTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !__DEV__ || typeof window === 'undefined') {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === WEB_DEV_RESET_TOUCH_KEY) {
+        event.preventDefault();
+        resetTouchRound();
+        return;
+      }
+
+      if (WEB_DEV_TOUCH_KEYS.has(event.key)) {
+        event.preventDefault();
+        webDevPressedKeysRef.current = [
+          ...webDevPressedKeysRef.current.filter((key) => key !== event.key),
+          event.key,
+        ];
+        webDevTouchKeyRef.current = event.key;
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!WEB_DEV_TOUCH_KEYS.has(event.key)) {
+        return;
+      }
+
+      event.preventDefault();
+      webDevPressedKeysRef.current = webDevPressedKeysRef.current.filter(
+        (key) => key !== event.key
+      );
+      webDevTouchKeyRef.current =
+        webDevPressedKeysRef.current[webDevPressedKeysRef.current.length - 1] ?? null;
+    };
+
+    const clearDevKey = () => {
+      webDevPressedKeysRef.current = [];
+      webDevTouchKeyRef.current = null;
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      const devKey =
+        webDevPressedKeysRef.current[webDevPressedKeysRef.current.length - 1] ??
+        webDevTouchKeyRef.current;
+
+      if (!devKey) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      addWebDevTouch(devKey, event.pageX, event.pageY);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const devKey =
+        webDevPressedKeysRef.current[webDevPressedKeysRef.current.length - 1] ??
+        webDevTouchKeyRef.current;
+
+      if (!devKey) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      addWebDevTouch(devKey, event.pageX, event.pageY);
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      const devKey =
+        webDevPressedKeysRef.current[webDevPressedKeysRef.current.length - 1] ??
+        webDevTouchKeyRef.current;
+      const touch = event.changedTouches[0];
+
+      if (!devKey || !touch) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      addWebDevTouch(devKey, touch.pageX, touch.pageY);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('mousedown', handleMouseDown, true);
+    window.addEventListener('touchstart', handleTouchStart, {
+      capture: true,
+      passive: false,
+    });
+    window.addEventListener('blur', clearDevKey);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('mousedown', handleMouseDown, true);
+      window.removeEventListener('touchstart', handleTouchStart, true);
+      window.removeEventListener('blur', clearDevKey);
     };
   }, []);
 
@@ -358,6 +486,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
   useEffect(() => {
     ignoredTouchIds.current.clear();
     latestWebTouchesRef.current = [];
+    webDevTouchesRef.current = [];
     setWinner(null);
     setSelectedOrder(null);
     setAwaitingRelease(false);
@@ -422,11 +551,78 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     );
   }
 
+  function resetTouchRound() {
+    ignoredTouchIds.current.clear();
+    latestWebTouchesRef.current = [];
+    webDevTouchesRef.current = [];
+    setWinner(null);
+    setSelectedOrder(null);
+    setAwaitingRelease(false);
+    setCountdownDeadline(null);
+    setRemainingMs(null);
+    queueActiveTouches([]);
+  }
+
+  function addWebDevTouch(devKey: string, x: number, y: number) {
+    const nextTouch = {
+      id: `dev-${devKey}`,
+      x,
+      y,
+    };
+    const nextTouches = [
+      ...webDevTouchesRef.current.filter((touch) => touch.id !== nextTouch.id),
+      nextTouch,
+    ].sort((left, right) => left.id.localeCompare(right.id));
+
+    if (awaitingRelease && activeTouchesRef.current.length === 0 && (winner || selectedOrder)) {
+      setWinner(null);
+      setSelectedOrder(null);
+      setAwaitingRelease(false);
+      setWinnerBurstKey((current) => current + 1);
+    }
+
+    ignoredTouchIds.current.clear();
+    webDevTouchesRef.current = nextTouches;
+    latestWebTouchesRef.current = nextTouches;
+    lastTouchEventAtRef.current = Date.now();
+    musicController.ensureBaseOnInteraction();
+    soundEffects.playPress();
+    queueActiveTouches(nextTouches);
+  }
+
+  function handleWebDevMouseDown(event: any) {
+    if (Platform.OS !== 'web' || !__DEV__) {
+      return;
+    }
+
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    const devKey =
+      webDevPressedKeysRef.current[webDevPressedKeysRef.current.length - 1] ??
+      webDevTouchKeyRef.current;
+
+    if (!devKey) {
+      return;
+    }
+
+    const nativeEvent = event?.nativeEvent ?? event;
+    addWebDevTouch(devKey, Number(nativeEvent?.pageX ?? 0), Number(nativeEvent?.pageY ?? 0));
+  }
+
   function handleTouchEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    if (shouldIgnoreWebDevTouchEvent()) {
+      return;
+    }
+
     handleTouchEventInternal(event, false, false);
   }
 
   function handleTouchStartEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    if (shouldIgnoreWebDevTouchEvent()) {
+      return;
+    }
+
     const shouldResetHeldResult =
       awaitingRelease &&
       activeTouchesRef.current.length === 0 &&
@@ -460,6 +656,14 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
 
   function registerUiTouchStart(event: NativeSyntheticEvent<NativeTouchEvent>) {
     registerTouchStart(event, { haptic: false });
+  }
+
+  function shouldIgnoreWebDevTouchEvent() {
+    return (
+      Platform.OS === 'web' &&
+      __DEV__ &&
+      (webDevTouchKeyRef.current !== null || webDevTouchesRef.current.length > 0)
+    );
   }
 
   function handleTouchEventInternal(
@@ -573,6 +777,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     handleTouchEvent,
     handleTouchStartEvent,
     handleUiTouchStart: registerUiTouchStart,
+    handleWebDevMouseDown,
     handleSurfaceLayout,
     isChoosing:
       settings.animations &&
