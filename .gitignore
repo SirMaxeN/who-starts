@@ -34,6 +34,11 @@ yarn-error.*
 # local env files
 .env*.local
 
+# local assistant/project notes
+AGENTS.md
+CLAUDE.md
+GOOGLE_PLAY_BILLING.md
+
 # typescript
 *.tsbuildinfo
 
