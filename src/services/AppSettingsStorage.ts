@@ -17,6 +17,8 @@ export class AppSettingsStorage {
           typeof parsed.animations === 'boolean'
             ? parsed.animations
             : DEFAULT_SETTINGS.animations,
+        haptics:
+          typeof parsed.haptics === 'boolean' ? parsed.haptics : DEFAULT_SETTINGS.haptics,
         music:
           typeof parsed.music === 'boolean' ? parsed.music : DEFAULT_SETTINGS.music,
         sounds:

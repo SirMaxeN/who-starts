@@ -19,8 +19,9 @@ export function OverlayModal({
 }: OverlayModalProps) {
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable onPress={onClose} onTouchStart={onTouchStart} style={styles.modalBackdrop}>
-        <Pressable onPress={() => undefined} style={styles.modalCard}>
+      <View onTouchStart={onTouchStart} style={styles.modalBackdrop}>
+        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
+        <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
             <Pressable onPress={onClose} style={styles.closeButton}>
@@ -28,8 +29,8 @@ export function OverlayModal({
             </Pressable>
           </View>
           <View style={styles.modalBody}>{children}</View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -80,6 +81,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   modalBody: {
+    flexGrow: 1,
     minHeight: 0,
     flexShrink: 1,
     gap: 12,

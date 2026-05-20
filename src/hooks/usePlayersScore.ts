@@ -1,28 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { TOUCH_COLORS } from '../constants/game';
+import { SCORE_PLAYER_COLORS } from '../constants/game';
 import { ScoreHistoryStorage } from '../services/ScoreHistoryStorage';
 import type { ScoreEntry, ScoreHistorySnapshot, ScorePlayer } from '../types/game';
 import { evaluateExpression } from '../utils/expression';
 
 const HISTORY_LIMIT = 20;
-
-function createEntry(index: number): ScoreEntry {
-  return {
-    error: null,
-    expression: '',
-    id: `entry-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-    value: null,
-  };
-}
+const PLAYER_LIMIT = 20;
+const PLAYER_NAME_LIMIT = 24;
 
 function computeTotal(entries: ScoreEntry[]) {
   return entries.reduce((sum, entry) => sum + (entry.value ?? 0), 0);
+}
+
+function createCommittedEntry(index: number, expression: string, value: number): ScoreEntry {
+  return {
+    error: null,
+    expression,
+    id: `entry-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    value,
+  };
+}
+
+function normalizePlayerName(name: string) {
+  return name.slice(0, PLAYER_NAME_LIMIT);
 }
 
 export function usePlayersScore() {
   const [players, setPlayers] = useState<ScorePlayer[]>([]);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [history, setHistory] = useState<ScoreHistorySnapshot[]>([]);
+  const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
+  const [lastSavedSnapshotId, setLastSavedSnapshotId] = useState<string | null>(null);
   const nextPlayerNumber = useRef(1);
   const nextColorIndex = useRef(0);
   const hasLoadedHistory = useRef(false);
@@ -32,7 +40,7 @@ export function usePlayersScore() {
 
     ScoreHistoryStorage.load().then((snapshots) => {
       if (isMounted) {
-        setHistory(snapshots);
+        setHistory(snapshots.slice(0, HISTORY_LIMIT));
         hasLoadedHistory.current = true;
       }
     });
@@ -50,18 +58,22 @@ export function usePlayersScore() {
     ScoreHistoryStorage.save(history);
   }, [history]);
 
-  const sortedPlayers = useMemo(
+const sortedPlayers = useMemo(
     () => [...players].sort((left, right) => right.total - left.total),
     [players]
   );
 
   function addPlayer() {
+    if (players.length >= PLAYER_LIMIT) {
+      return;
+    }
+
     const playerNumber = nextPlayerNumber.current;
     nextPlayerNumber.current += 1;
 
     const player: ScorePlayer = {
-      color: TOUCH_COLORS[nextColorIndex.current % TOUCH_COLORS.length],
-      entries: [createEntry(playerNumber)],
+      color: SCORE_PLAYER_COLORS[nextColorIndex.current % SCORE_PLAYER_COLORS.length],
+      entries: [],
       id: `score-player-${Date.now()}-${playerNumber}`,
       name: `Player ${playerNumber}`,
       total: 0,
@@ -81,71 +93,67 @@ export function usePlayersScore() {
   function renamePlayer(playerId: string, name: string) {
     updatePlayer(playerId, (player) => ({
       ...player,
-      name,
+      name: normalizePlayerName(name),
     }));
   }
 
-  function changeEntry(playerId: string, entryId: string, expression: string) {
-    updatePlayer(playerId, (player) => ({
-      ...player,
-      entries: player.entries.map((entry) =>
-        entry.id === entryId
-          ? {
-              ...entry,
-              error: null,
-              expression,
-            }
-          : entry
-      ),
-    }));
-  }
+  function setPlayerColor(playerId: string, color: string) {
+    setPlayers((current) => {
+      const targetPlayer = current.find((player) => player.id === playerId);
+      const occupiedPlayer = current.find(
+        (player) => player.id !== playerId && player.color === color
+      );
 
-  function commitEntry(playerId: string, entryId: string) {
-    updatePlayer(playerId, (player) => {
-      const nextEntries = player.entries.map((entry) => {
-        if (entry.id !== entryId) {
-          return entry;
-        }
-
-        if (!entry.expression.trim()) {
-          return {
-            ...entry,
-            error: null,
-            value: null,
-          };
-        }
-
-        const evaluation = evaluateExpression(entry.expression);
-        if (evaluation.error) {
-          return {
-            ...entry,
-            error: evaluation.error,
-            value: null,
-          };
-        }
-
-        const normalizedSource = evaluation.value;
-        if (normalizedSource === null) {
-          return {
-            ...entry,
-            error: 'Invalid expression.',
-            value: null,
-          };
-        }
-
-        const normalized = Number(normalizedSource.toFixed(4));
-        return {
-          ...entry,
-          error: null,
-          expression: String(normalized),
-          value: normalized,
-        };
-      });
-
-      const lastEntry = nextEntries[nextEntries.length - 1];
-      if (lastEntry && lastEntry.expression.trim()) {
-        nextEntries.push(createEntry(nextEntries.length + 1));
+      if (!targetPlayer || targetPlayer.color === color) {
+        return current;
       }
+
+      if (current.length > SCORE_PLAYER_COLORS.length) {
+        return current.map((player) => (player.id === playerId ? { ...player, color } : player));
+      }
+
+      return current.map((player) => {
+        if (player.id === playerId) {
+          return { ...player, color };
+        }
+
+        if (occupiedPlayer && player.id === occupiedPlayer.id) {
+          return { ...player, color: targetPlayer.color };
+        }
+
+        return player;
+      });
+    });
+  }
+
+  function addEntry(playerId: string, expression: string) {
+    const evaluation = evaluateExpression(expression);
+
+    if (evaluation.error || evaluation.value === null) {
+      return evaluation;
+    }
+
+    const normalized = Number(evaluation.value.toFixed(4));
+
+    updatePlayer(playerId, (player) => {
+      const nextEntries = [
+        createCommittedEntry(player.entries.length + 1, String(normalized), normalized),
+        ...player.entries,
+      ];
+
+      return {
+        ...player,
+        entries: nextEntries,
+        total: computeTotal(nextEntries),
+      };
+    });
+
+    return { error: null, value: normalized };
+  }
+
+  function deleteEntry(playerId: string, entryId: string) {
+    updatePlayer(playerId, (player) => {
+      const nextEntries = player.entries.filter((entry) => entry.id !== entryId);
 
       return {
         ...player,
@@ -155,9 +163,27 @@ export function usePlayersScore() {
     });
   }
 
+  function deletePlayer(playerId: string) {
+    const nextPlayers = players.filter((player) => player.id !== playerId);
+
+    setPlayers(nextPlayers);
+    if (activePlayerId === playerId) {
+      setActivePlayerId(nextPlayers[0]?.id ?? null);
+    }
+  }
+
+  function resetPlayerScore(playerId: string) {
+    updatePlayer(playerId, (player) => ({
+      ...player,
+      entries: [],
+      total: 0,
+    }));
+  }
+
   function reset() {
     setPlayers([]);
     setActivePlayerId(null);
+    setEditingSnapshotId(null);
     nextPlayerNumber.current = 1;
     nextColorIndex.current = 0;
   }
@@ -167,9 +193,14 @@ export function usePlayersScore() {
       return;
     }
 
+    const snapshotId = editingSnapshotId ?? `snapshot-${Date.now()}`;
+    const snapshotName =
+      history.find((item) => item.id === editingSnapshotId)?.name ||
+      `History #${history.length + 1}`;
     const snapshot: ScoreHistorySnapshot = {
       createdAt: new Date().toISOString(),
-      id: `snapshot-${Date.now()}`,
+      id: snapshotId,
+      name: snapshotName,
       players: sortedPlayers.map((player) => ({
         color: player.color,
         id: player.id,
@@ -178,20 +209,75 @@ export function usePlayersScore() {
       })),
     };
 
-    setHistory((current) => [snapshot, ...current].slice(0, HISTORY_LIMIT));
+    setHistory((current) => {
+      if (editingSnapshotId) {
+        return current.map((item) => (item.id === editingSnapshotId ? snapshot : item));
+      }
+
+      return [snapshot, ...current].slice(0, HISTORY_LIMIT);
+    });
+    setLastSavedSnapshotId(snapshotId);
+    reset();
+  }
+
+  function deleteHistorySnapshot(snapshotId: string) {
+    setHistory((current) => current.filter((snapshot) => snapshot.id !== snapshotId));
+    if (editingSnapshotId === snapshotId) {
+      setEditingSnapshotId(null);
+    }
+  }
+
+  function renameHistorySnapshot(snapshotId: string, name: string) {
+    const normalized = name.trim() || 'History';
+    setHistory((current) =>
+      current.map((snapshot) =>
+        snapshot.id === snapshotId ? { ...snapshot, name: normalized.slice(0, 28) } : snapshot
+      )
+    );
+  }
+
+  function editHistorySnapshot(snapshotId: string) {
+    const snapshot = history.find((item) => item.id === snapshotId);
+    if (!snapshot) {
+      return;
+    }
+
+    const restoredPlayers = snapshot.players.map((player, index) => ({
+      color: player.color,
+      entries: [
+        createCommittedEntry(index + 1, String(player.total), player.total),
+      ],
+      id: player.id,
+      name: normalizePlayerName(player.name),
+      total: player.total,
+    }));
+
+    setPlayers(restoredPlayers);
+    setActivePlayerId(restoredPlayers[0]?.id ?? null);
+    setEditingSnapshotId(snapshot.id);
+    nextPlayerNumber.current = restoredPlayers.length + 1;
+    nextColorIndex.current = restoredPlayers.length;
   }
 
   return {
     activePlayerId,
+    addEntry,
     addPlayer,
-    changeEntry,
-    commitEntry,
+    deleteEntry,
+    deleteHistorySnapshot,
+    deletePlayer,
+    editHistorySnapshot,
+    editingSnapshotId,
     history,
+    lastSavedSnapshotId,
     players,
+    renameHistorySnapshot,
     renamePlayer,
     reset,
+    resetPlayerScore,
     save,
     selectPlayer: setActivePlayerId,
+    setPlayerColor,
     sortedPlayers,
   };
 }

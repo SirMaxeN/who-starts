@@ -15,7 +15,8 @@ export class ScoreHistoryStorage {
         return [];
       }
 
-      return parsed.filter((snapshot): snapshot is ScoreHistorySnapshot => {
+      return parsed
+        .filter((snapshot): snapshot is ScoreHistorySnapshot => {
         if (!snapshot || typeof snapshot !== 'object') {
           return false;
         }
@@ -26,7 +27,11 @@ export class ScoreHistoryStorage {
           typeof candidate.createdAt === 'string' &&
           Array.isArray(candidate.players)
         );
-      });
+        })
+        .map((snapshot, index) => ({
+          ...snapshot,
+          name: snapshot.name || `History #${index + 1}`,
+        }));
     } catch {
       return [];
     }

@@ -4,6 +4,7 @@ export type RoundMode = 'manual' | 1000 | 2000 | 3000 | 5000 | 10000;
 
 export type AppSettings = {
   animations: boolean;
+  haptics: boolean;
   music: boolean;
   sounds: boolean;
 };
@@ -92,6 +93,7 @@ export type ScorePlayer = {
 export type ScoreHistorySnapshot = {
   createdAt: string;
   id: string;
+  name: string;
   players: Array<{
     color: string;
     id: string;

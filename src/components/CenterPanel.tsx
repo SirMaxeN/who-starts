@@ -1,5 +1,14 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { type ReactNode, useEffect, useRef } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  type StyleProp,
+  type TextStyle,
+  View,
+} from 'react-native';
 import type { AppScreen, RoundMode, TouchPoint } from '../types/game';
 import { getModeLabel, getTouchColor } from '../utils/game';
 
@@ -18,6 +27,25 @@ type CenterPanelProps = {
   selectedOrder?: TouchPoint[] | null;
   winner: TouchPoint | null;
 };
+
+type CenterTextProps = {
+  children: ReactNode;
+  minimumFontScale?: number;
+  style: StyleProp<TextStyle>;
+};
+
+function CenterText({ children, minimumFontScale = 0.48, style }: CenterTextProps) {
+  return (
+    <Text
+      adjustsFontSizeToFit
+      minimumFontScale={minimumFontScale}
+      numberOfLines={1}
+      style={style}
+    >
+      {children}
+    </Text>
+  );
+}
 
 export function CenterPanel({
   activeTouches,
@@ -84,9 +112,13 @@ export function CenterPanel({
 
       return (
         <>
-          <Text style={[styles.centerEyebrow, { color: winnerColor }]}>Winner</Text>
-          <Text style={[styles.centerValue, { color: winnerColor }]}>{winnerLabel}</Text>
-          <Text style={styles.centerHint}>Release all fingers</Text>
+          <CenterText style={[styles.centerEyebrow, { color: winnerColor }]}>Winner</CenterText>
+          <CenterText minimumFontScale={0.36} style={[styles.centerValue, { color: winnerColor }]}>
+            {winnerLabel}
+          </CenterText>
+          <CenterText style={styles.centerHint}>
+            {activeTouches.length > 0 ? 'Release all fingers' : 'Tap to reset'}
+          </CenterText>
         </>
       );
     }
@@ -94,11 +126,13 @@ export function CenterPanel({
     if (screen === 'players-order' && selectedOrder) {
       return (
         <>
-          <Text style={styles.centerEyebrow}>Player Order</Text>
-          <Text style={styles.centerValue}>{selectedOrder.length}</Text>
-          <Text style={styles.centerHint}>
+          <CenterText style={styles.centerEyebrow}>Turn Order</CenterText>
+          <CenterText minimumFontScale={0.36} style={styles.centerValue}>
+            {selectedOrder.length}
+          </CenterText>
+          <CenterText style={styles.centerHint}>
             {activeTouches.length > 0 ? 'Release all fingers' : 'Tap to reset'}
-          </Text>
+          </CenterText>
         </>
       );
     }
@@ -113,16 +147,20 @@ export function CenterPanel({
               pressed && styles.manualButtonPressed,
             ]}
           >
-            <Text style={styles.manualButtonText}>START</Text>
+            <CenterText style={styles.manualButtonText}>START</CenterText>
           </Pressable>
         );
       }
 
       return (
         <>
-          <Text style={styles.centerEyebrow}>Mode</Text>
-          <Text style={styles.centerValue}>Manual</Text>
-          <Text style={styles.centerHint}>Hold 2+ fingers outside START</Text>
+          <CenterText style={styles.centerEyebrow}>Mode</CenterText>
+          <CenterText minimumFontScale={0.36} style={styles.centerValue}>
+            Manual
+          </CenterText>
+          <CenterText minimumFontScale={0.38} style={styles.centerHint}>
+            Hold 2+ fingers outside START
+          </CenterText>
         </>
       );
     }
@@ -130,9 +168,11 @@ export function CenterPanel({
     if (activeTouches.length >= 2 && remainingMs !== null) {
       return (
         <>
-          <Text style={styles.centerEyebrow}>Countdown</Text>
-          <Text style={styles.centerValue}>{(remainingMs / 1000).toFixed(1)}</Text>
-          <Text style={styles.centerHint}>Keep still to lock it in</Text>
+          <CenterText style={styles.centerEyebrow}>Countdown</CenterText>
+          <CenterText minimumFontScale={0.36} style={styles.centerValue}>
+            {(remainingMs / 1000).toFixed(1)}
+          </CenterText>
+          <CenterText style={styles.centerHint}>Keep still to lock it in</CenterText>
         </>
       );
     }
@@ -140,9 +180,11 @@ export function CenterPanel({
     if (activeTouches.length === 1) {
       return (
         <>
-          <Text style={styles.centerEyebrow}>Waiting</Text>
-          <Text style={styles.centerValue}>1</Text>
-          <Text style={styles.centerHint}>Need one more finger</Text>
+          <CenterText style={styles.centerEyebrow}>Waiting</CenterText>
+          <CenterText minimumFontScale={0.36} style={styles.centerValue}>
+            1
+          </CenterText>
+          <CenterText style={styles.centerHint}>Need one more finger</CenterText>
         </>
       );
     }
@@ -150,18 +192,24 @@ export function CenterPanel({
     if (screen === 'players-order') {
       return (
         <>
-          <Text style={styles.centerEyebrow}>Players Order</Text>
-          <Text style={styles.centerValue}>{getModeLabel(roundMode)}</Text>
-          <Text style={styles.centerHint}>Place 2+ fingers to build the full chain</Text>
+          <CenterText style={styles.centerEyebrow}>Turn Order</CenterText>
+          <CenterText minimumFontScale={0.36} style={styles.centerValue}>
+            {getModeLabel(roundMode)}
+          </CenterText>
+          <CenterText minimumFontScale={0.34} style={styles.centerHint}>
+            Place 2+ fingers to build the full chain
+          </CenterText>
         </>
       );
     }
 
     return (
       <>
-        <Text style={styles.centerEyebrow}>WhoStarts?</Text>
-        <Text style={styles.centerValue}>{getModeLabel(roundMode)}</Text>
-        <Text style={styles.centerHint}>Place 2+ fingers anywhere</Text>
+        <CenterText style={styles.centerEyebrow}>WhoStarts?</CenterText>
+        <CenterText minimumFontScale={0.36} style={styles.centerValue}>
+          {getModeLabel(roundMode)}
+        </CenterText>
+        <CenterText style={styles.centerHint}>Place 2+ fingers anywhere</CenterText>
       </>
     );
   }
@@ -195,7 +243,7 @@ const styles = StyleSheet.create({
     width: CENTER_PANEL_SIZE,
     minHeight: CENTER_PANEL_SIZE,
     borderRadius: CENTER_PANEL_RADIUS,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(8, 14, 30, 0.8)',
@@ -210,27 +258,43 @@ const styles = StyleSheet.create({
     color: '#8FB3D8',
     fontSize: 14,
     fontWeight: '600',
+    includeFontPadding: false,
     letterSpacing: 1.4,
+    lineHeight: 18,
+    textAlign: 'center',
+    textAlignVertical: 'center',
     textTransform: 'uppercase',
+    width: '100%',
   },
   centerValue: {
     marginTop: 10,
     color: '#F6FDFF',
     fontSize: 44,
     fontWeight: '800',
+    includeFontPadding: false,
     letterSpacing: 1,
+    lineHeight: 52,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    width: '100%',
   },
   centerHint: {
     marginTop: 10,
     color: '#9AB2C9',
     fontSize: 14,
+    includeFontPadding: false,
     textAlign: 'center',
-    lineHeight: 20,
+    textAlignVertical: 'center',
+    lineHeight: 18,
+    width: '100%',
   },
   manualButton: {
     minWidth: 148,
+    minHeight: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 28,
-    paddingVertical: 18,
+    paddingVertical: 0,
     borderRadius: 999,
     backgroundColor: '#00E4FF',
     shadowColor: '#00E4FF',
@@ -243,9 +307,13 @@ const styles = StyleSheet.create({
   },
   manualButtonText: {
     color: '#04131E',
-    textAlign: 'center',
     fontSize: 18,
     fontWeight: '900',
+    includeFontPadding: false,
     letterSpacing: 1.5,
+    lineHeight: 22,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    width: '100%',
   },
 });

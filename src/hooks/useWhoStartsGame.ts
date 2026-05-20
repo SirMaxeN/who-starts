@@ -85,6 +85,34 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     winnerId: winner?.id ?? null,
   });
 
+  function runHaptic(effect: () => Promise<void>) {
+    if (!settings.haptics || Platform.OS === 'web') {
+      return;
+    }
+
+    effect().catch(() => {
+      // Ignore haptics issues on unsupported devices.
+    });
+  }
+
+  function playTapHaptic() {
+    runHaptic(() => Haptics.selectionAsync());
+  }
+
+  function playLightHaptic() {
+    runHaptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+  }
+
+  function playStartHaptic() {
+    runHaptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+  }
+
+  function playSuccessHaptic() {
+    runHaptic(() =>
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    );
+  }
+
   useEffect(() => {
     activeTouchesRef.current = activeTouches;
   }, [activeTouches]);
@@ -269,6 +297,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     const deadline = Date.now() + roundMode;
     setCountdownDeadline(deadline);
     setRemainingMs(roundMode);
+    playStartHaptic();
   }, [activeTouches.length, awaitingRelease, roundMode, touchSignature, winner]);
 
   useEffect(() => {
@@ -289,7 +318,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
   useEffect(() => {
     setPlayerLabels((currentLabels) => {
       if (activeTouches.length === 0) {
-        if (selectedOrder) {
+        if (selectedOrder || winner) {
           return currentLabels;
         }
 
@@ -310,21 +339,21 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
 
       return hasChanges ? nextLabels : currentLabels;
     });
-  }, [activeTouches, selectedOrder]);
+  }, [activeTouches, selectedOrder, winner]);
 
   useEffect(() => {
     if (!awaitingRelease || activeTouches.length !== 0) {
       return;
     }
 
-    if (isOrderScreen && selectedOrder) {
+    if ((isOrderScreen && selectedOrder) || winner) {
       return;
     }
 
     setWinner(null);
     setSelectedOrder(null);
     setAwaitingRelease(false);
-  }, [activeTouches.length, awaitingRelease, isOrderScreen, selectedOrder]);
+  }, [activeTouches.length, awaitingRelease, isOrderScreen, selectedOrder, winner]);
 
   useEffect(() => {
     ignoredTouchIds.current.clear();
@@ -367,11 +396,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     setCountdownDeadline(null);
     setRemainingMs(null);
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => {
-        // Ignore haptics issues on unsupported devices.
-      }
-    );
+    playSuccessHaptic();
   }
 
   useEffect(() => {
@@ -398,39 +423,56 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
   }
 
   function handleTouchEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
-    handleTouchEventInternal(event, false);
+    handleTouchEventInternal(event, false, false);
   }
 
   function handleTouchStartEvent(event: NativeSyntheticEvent<NativeTouchEvent>) {
-    if (isOrderScreen && selectedOrder && awaitingRelease && activeTouchesRef.current.length === 0) {
+    const shouldResetHeldResult =
+      awaitingRelease &&
+      activeTouchesRef.current.length === 0 &&
+      (winner !== null || (isOrderScreen && selectedOrder !== null));
+
+    if (shouldResetHeldResult) {
+      setWinner(null);
       setSelectedOrder(null);
       setAwaitingRelease(false);
       setWinnerBurstKey((current) => current + 1);
     }
 
-    registerTouchStart(event);
-    handleTouchEventInternal(event, true);
+    registerTouchStart(event, { haptic: true });
+    handleTouchEventInternal(event, true, shouldResetHeldResult);
   }
 
-  function registerTouchStart(event: NativeSyntheticEvent<NativeTouchEvent>) {
+  function registerTouchStart(
+    event: NativeSyntheticEvent<NativeTouchEvent>,
+    options: { haptic: boolean }
+  ) {
     const changedTouches = mapChangedTouchIds(event);
     musicController.ensureBaseOnInteraction();
 
     for (const _touch of changedTouches) {
       soundEffects.playPress();
+      if (options.haptic) {
+        playLightHaptic();
+      }
     }
+  }
+
+  function registerUiTouchStart(event: NativeSyntheticEvent<NativeTouchEvent>) {
+    registerTouchStart(event, { haptic: false });
   }
 
   function handleTouchEventInternal(
     event: NativeSyntheticEvent<NativeTouchEvent>,
-    isTouchStart: boolean
+    isTouchStart: boolean,
+    didResetHeldResult: boolean
   ) {
     lastTouchEventAtRef.current = Date.now();
     const nextTouches = mapTouches(event);
     const currentIds = new Set(nextTouches.map((touch) => touch.id));
     const changedTouches = mapChangedTouchIds(event);
 
-    if (awaitingRelease && (winner || selectedOrder)) {
+    if (!didResetHeldResult && awaitingRelease && (winner || selectedOrder)) {
       for (const ignoredId of Array.from(ignoredTouchIds.current)) {
         if (!currentIds.has(ignoredId)) {
           ignoredTouchIds.current.delete(ignoredId);
@@ -530,7 +572,7 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     closeSettings: () => setIsSettingsOpen(false),
     handleTouchEvent,
     handleTouchStartEvent,
-    handleUiTouchStart: registerTouchStart,
+    handleUiTouchStart: registerUiTouchStart,
     handleSurfaceLayout,
     isChoosing:
       settings.animations &&
@@ -555,8 +597,12 @@ export function useWhoStartsGame({ screen }: UseWhoStartsGameParams) {
     },
     playChosen: soundEffects.playChosen,
     playChosenWithRate: soundEffects.playChosenWithRate,
+    playLightHaptic,
     playPress: soundEffects.playPress,
     playPlayerTone: soundEffects.playPlayerTone,
+    playStartHaptic,
+    playSuccessHaptic,
+    playTapHaptic,
     playSlide: soundEffects.playSlide,
     playerLabels,
     remainingMs,

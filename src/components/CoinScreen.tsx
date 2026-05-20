@@ -24,6 +24,7 @@ type CoinScreenProps = {
   onFlipStartSound?: () => void;
   onFlipTickSound?: () => void;
   onFlipTone?: (playbackRate: number) => void;
+  onSlideSound?: () => void;
   result: CoinSide | null;
 };
 
@@ -34,6 +35,7 @@ const MAX_EXTRA_FLIP_HALF_TURNS = 2;
 const HALF_TURN_DURATION_MS = 85;
 const COIN_JUMP_DURATION_MULTIPLIER = 3.3;
 const COIN_WOBBLE_MAX_DEG = 18;
+const DO_COIN_SYMBOL_SCALE = 0.75;
 const COIN_SEQUENCE: CoinMode[] = [
   'heads-tails',
   'yes-no',
@@ -54,6 +56,7 @@ export function CoinScreen({
   onFlipStartSound,
   onFlipTickSound,
   onFlipTone,
+  onSlideSound,
   result,
 }: CoinScreenProps) {
   const [positiveFace, negativeFace] = getCoinModeSides(mode);
@@ -294,7 +297,7 @@ export function CoinScreen({
   }
 
   function finishFlip(finalFace: CoinSide) {
-    setFlashColor(isPositiveFace(finalFace) ? '#54E6FF' : '#FF4FD8');
+    setFlashColor(getFaceTheme(finalFace).glowColor);
     resultBurst.stopAnimation();
     screenFlash.stopAnimation();
     resultBurst.setValue(0);
@@ -426,6 +429,7 @@ export function CoinScreen({
 
     if (absX > 42 && absX > absY * 1.2) {
       lastSwipeDirection.current = deltaX > 0 ? -1 : 1;
+      onSlideSound?.();
       onChangeMode?.(deltaX > 0 ? -1 : 1);
       return;
     }
@@ -450,7 +454,7 @@ export function CoinScreen({
         ]}
       />
 
-      <Text style={styles.eyebrow}>Quick Coin Flip</Text>
+      <Text style={styles.eyebrow}>Quick Flip</Text>
 
       <View
         onTouchEnd={(event) => {
@@ -910,7 +914,9 @@ function SkiaCoinFaceArt({ side, theme }: { side: CoinSide; theme: CoinFaceTheme
       ) : side === 'No' ? (
         <SkiaNoSymbol theme={theme} />
       ) : side === 'Do' ? (
-        <SkiaDoSymbol theme={theme} />
+        <Group origin={vec(113, 113)} transform={[{ scale: DO_COIN_SYMBOL_SCALE }]}>
+          <SkiaDoSymbol theme={theme} />
+        </Group>
       ) : side === 'Skip' ? (
         <SkiaSkipSymbol theme={theme} />
       ) : side === 'Left' ? (

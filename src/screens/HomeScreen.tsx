@@ -21,7 +21,6 @@ import {
 } from '../constants/game';
 import { usePlayersScore } from '../hooks/usePlayersScore';
 import { useWhoStartsGame } from '../hooks/useWhoStartsGame';
-import { ActiveScreenStorage } from '../services/ActiveScreenStorage';
 import { RollHistoryStorage, type CoinHistoryByMode } from '../services/RollHistoryStorage';
 import { CoinModeScreen } from './modes/CoinModeScreen';
 import { DiceModeScreen } from './modes/DiceModeScreen';
@@ -66,6 +65,7 @@ export function HomeScreen() {
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [isContextPickerOpen, setIsContextPickerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [scoreboardView, setScoreboardView] = useState<'history' | 'score'>('score');
   const [diceKind, setDiceKind] = useState<DiceKind>('d6');
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const [diceHistory, setDiceHistory] = useState<DiceHistoryEntry[]>([]);
@@ -110,19 +110,8 @@ export function HomeScreen() {
     }
 
     setIsDesktopNoticeOpen(false);
-    let isMounted = true;
-    ActiveScreenStorage.load(INITIAL_SCREEN).then((screen) => {
-      if (!isMounted) {
-        return;
-      }
-
-      setMobileScreen(PREMIUM_UNLOCKED || screen === 'first-player' ? screen : 'first-player');
-      setHasLoadedMobileScreen(true);
-    });
-
-    return () => {
-      isMounted = false;
-    };
+    setMobileScreen(INITIAL_SCREEN);
+    setHasLoadedMobileScreen(true);
   }, [isDesktopWeb, isWeb]);
 
   useEffect(() => {
@@ -149,19 +138,6 @@ export function HomeScreen() {
     };
   }, [isWeb]);
 
-  useEffect(() => {
-    if (isWeb || !hasLoadedMobileScreen) {
-      return;
-    }
-
-    if (!PREMIUM_UNLOCKED && mobileScreen !== 'first-player') {
-      setMobileScreen('first-player');
-      return;
-    }
-
-    ActiveScreenStorage.save(mobileScreen);
-  }, [hasLoadedMobileScreen, isWeb, mobileScreen]);
-
   const chipLabel = useMemo(() => {
     if (currentScreen === 'first-player' || currentScreen === 'players-order') {
       return game.roundMode === 'manual' ? 'Manual' : `${game.roundMode / 1000}s`;
@@ -175,8 +151,12 @@ export function HomeScreen() {
       return COIN_OPTIONS.find((option) => option.value === coinMode)?.label ?? 'Coin';
     }
 
+    if (currentScreen === 'players-score') {
+      return scoreboardView === 'history' ? 'History' : 'Score';
+    }
+
     return currentScreenConfig.chipLabel;
-  }, [coinMode, currentScreen, currentScreenConfig.chipLabel, diceKind, game.roundMode]);
+  }, [coinMode, currentScreen, currentScreenConfig.chipLabel, diceKind, game.roundMode, scoreboardView]);
 
   const contextTitle = useMemo(() => {
     if (currentScreen === 'dice') {
@@ -193,6 +173,10 @@ export function HomeScreen() {
 
     if (currentScreen === 'first-player') {
       return 'Round mode';
+    }
+
+    if (currentScreen === 'players-score') {
+      return 'Scoreboard view';
     }
 
     return currentScreenConfig.title;
@@ -220,6 +204,13 @@ export function HomeScreen() {
       }));
     }
 
+    if (currentScreen === 'players-score') {
+      return [
+        { label: 'Score', value: 'score' },
+        { label: 'History', value: 'history' },
+      ];
+    }
+
     return [];
   }, [currentScreen]);
 
@@ -236,26 +227,39 @@ export function HomeScreen() {
       return String(game.roundMode);
     }
 
+    if (currentScreen === 'players-score') {
+      return scoreboardView;
+    }
+
     return '';
-  }, [coinMode, currentScreen, diceKind, game.roundMode]);
+  }, [coinMode, currentScreen, diceKind, game.roundMode, scoreboardView]);
 
   if (!hasLoadedMobileScreen) {
     return <View style={styles.app} />;
   }
 
-  function handleToggleSetting(key: 'animations' | 'music' | 'sounds') {
+  function handleTapAction(action: () => void) {
+    action();
+  }
+
+  function handleToggleSetting(key: 'animations' | 'haptics' | 'music' | 'sounds') {
+    game.playTapHaptic();
     game.setSettings((current) => ({ ...current, [key]: !current[key] }));
   }
 
   function handleSelectRoundMode(value: (typeof MODE_OPTIONS)[number]['value']) {
+    game.playTapHaptic();
     game.setRoundMode(value);
   }
 
   function handleManualStart() {
+    game.playStartHaptic();
     game.selectWinner(game.activeTouches);
   }
 
   function handleSelectScreen(nextScreen: AppScreen) {
+    game.playTapHaptic();
+
     if (APP_SCREENS[nextScreen].premium && !PREMIUM_UNLOCKED) {
       setIsPremiumModalOpen(true);
       return;
@@ -274,6 +278,7 @@ export function HomeScreen() {
   }
 
   function handleRollDice() {
+    game.playStartHaptic();
     const sides = Number(diceKind.slice(1));
     const result = Math.floor(Math.random() * sides) + 1;
     setDiceResult(result);
@@ -298,9 +303,11 @@ export function HomeScreen() {
       return nextHistory;
     });
     pendingDiceResultRef.current = null;
+    game.playSuccessHaptic();
   }
 
   function handleFlipCoin() {
+    game.playStartHaptic();
     const [positive, negative] = getCoinSides(coinMode);
     const result: CoinSide = Math.random() > 0.5 ? positive : negative;
     setCoinResult(result);
@@ -332,6 +339,12 @@ export function HomeScreen() {
       return nextHistory;
     });
     pendingCoinResultRef.current = null;
+    game.playSuccessHaptic();
+  }
+
+  function handleScoreSuccess() {
+    game.playChosen();
+    game.playSuccessHaptic();
   }
 
   function renderCurrentScreen() {
@@ -344,10 +357,10 @@ export function HomeScreen() {
           contextLabel={chipLabel}
           isChoosing={game.settings.animations && game.isChoosing}
           onLayout={game.handleSurfaceLayout}
-          onOpenContext={() => setIsContextPickerOpen(true)}
+          onOpenContext={() => handleTapAction(() => setIsContextPickerOpen(true))}
           onOpenHelp={() => setIsHelpOpen(true)}
           onOpenPremium={() => undefined}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
           onStartManualRound={handleManualStart}
           onTouchCancel={game.handleTouchEvent}
           onTouchEnd={game.handleTouchEvent}
@@ -375,9 +388,9 @@ export function HomeScreen() {
           contextLabel={chipLabel}
           isChoosing={game.settings.animations && game.isChoosing}
           onLayout={game.handleSurfaceLayout}
-          onOpenContext={() => setIsContextPickerOpen(true)}
-          onOpenPremium={() => setIsPremiumModalOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenContext={() => handleTapAction(() => setIsContextPickerOpen(true))}
+          onOpenPremium={() => handleTapAction(() => setIsPremiumModalOpen(true))}
+          onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
           onStartManualRound={handleManualStart}
           onTouchCancel={game.handleTouchEvent}
           onTouchEnd={game.handleTouchEvent}
@@ -404,9 +417,9 @@ export function HomeScreen() {
           contextLabel={chipLabel}
           isChoosing={game.settings.animations && game.isChoosing}
           onLayout={game.handleSurfaceLayout}
-          onOpenContext={() => setIsContextPickerOpen(true)}
-          onOpenPremium={() => setIsPremiumModalOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenContext={() => handleTapAction(() => setIsContextPickerOpen(true))}
+          onOpenPremium={() => handleTapAction(() => setIsPremiumModalOpen(true))}
+          onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
           onOrderRevealSound={game.playPlayerTone}
           onStartManualRound={handleManualStart}
           onTouchCancel={game.handleTouchEvent}
@@ -435,14 +448,14 @@ export function HomeScreen() {
           history={diceHistory}
           onChangeKind={handleDiceKindChange}
           onCommitRoll={handleCommitDiceResult}
-          onOpenContext={() => setIsContextPickerOpen(true)}
-          onOpenPremium={() => setIsPremiumModalOpen(true)}
+          onOpenContext={() => handleTapAction(() => setIsContextPickerOpen(true))}
+          onOpenPremium={() => handleTapAction(() => setIsPremiumModalOpen(true))}
           onPlayChosenSound={game.playChosen}
           onPlayChosenSoundWithRate={game.playChosenWithRate}
           onPlayExtremeTone={game.playPlayerTone}
           onPlayRollTickSound={game.playPress}
           onPlaySlideSound={game.playSlide}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
           onRoll={handleRollDice}
           result={diceResult}
           roundMode={game.roundMode}
@@ -462,13 +475,14 @@ export function HomeScreen() {
           onChangeMode={handleCoinModeChange}
           onCommitFlip={handleCommitCoinResult}
           onFlip={handleFlipCoin}
-          onOpenContext={() => setIsContextPickerOpen(true)}
+          onOpenContext={() => handleTapAction(() => setIsContextPickerOpen(true))}
           onPlayFlipResultSound={game.playChosenWithRate}
           onPlayFlipStartSound={game.playSlide}
           onPlayFlipTickSound={game.playPress}
           onPlayFlipTone={game.playPlayerTone}
-          onOpenPremium={() => setIsPremiumModalOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onPlaySlideSound={game.playSlide}
+          onOpenPremium={() => handleTapAction(() => setIsPremiumModalOpen(true))}
+          onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
           result={coinResult}
           roundMode={game.roundMode}
         />
@@ -479,10 +493,20 @@ export function HomeScreen() {
       <PlayersScoreModeScreen
         animationsEnabled={game.settings.animations}
         contextLabel={chipLabel}
-        onOpenPremium={() => setIsPremiumModalOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onActionHaptic={game.playTapHaptic}
+        onAddEntrySuccess={handleScoreSuccess}
+        onOpenPremium={() => handleTapAction(() => setIsPremiumModalOpen(true))}
+        onOpenSettings={() => handleTapAction(() => setIsSettingsOpen(true))}
+        onOpenViewPicker={() => handleTapAction(() => setIsContextPickerOpen(true))}
+        onPlayKeypad={game.playPress}
+        onPlayPlayer={game.playPlayerTone}
+        onPlaySlide={game.playSlide}
+        onResetHaptic={game.playStartHaptic}
+        onSaveHaptic={handleScoreSuccess}
+        onShowScore={() => setScoreboardView('score')}
         roundMode={game.roundMode}
         score={score}
+        view={scoreboardView}
       />
     );
   }
@@ -499,6 +523,7 @@ export function HomeScreen() {
                 <Pressable
                   key={option.value}
                   onPress={() => {
+                    game.playTapHaptic();
                     setDiceKind(option.value);
                     setDiceResult(null);
                   }}
@@ -534,6 +559,7 @@ export function HomeScreen() {
                 <Pressable
                   key={option.value}
                   onPress={() => {
+                    game.playTapHaptic();
                     setCoinMode(option.value);
                     setCoinResult(null);
                   }}
@@ -541,7 +567,7 @@ export function HomeScreen() {
                 >
                   <Text
                     adjustsFontSizeToFit
-                    minimumFontScale={0.68}
+                    minimumFontScale={0.52}
                     numberOfLines={1}
                     style={[
                       styles.optionButtonText,
@@ -589,6 +615,45 @@ export function HomeScreen() {
       );
     }
 
+    if (currentScreen === 'players-score') {
+      return (
+        <>
+          <Text style={styles.sectionTitle}>Scoreboard view</Text>
+          <View style={styles.optionsGrid}>
+            {[
+              { label: 'Score', value: 'score' },
+              { label: 'History', value: 'history' },
+            ].map((option) => {
+              const isSelected = option.value === scoreboardView;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    game.playTapHaptic();
+                    game.playSlide();
+                    setScoreboardView(option.value === 'history' ? 'history' : 'score');
+                  }}
+                  style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                >
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.62}
+                    numberOfLines={1}
+                    style={[
+                      styles.optionButtonText,
+                      isSelected && styles.optionButtonTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      );
+    }
+
     return null;
   }
 
@@ -609,12 +674,16 @@ export function HomeScreen() {
             <Pressable
               key={option.value}
               onPress={() => {
+                game.playTapHaptic();
                 if (currentScreen === 'dice') {
                   setDiceKind(option.value as DiceKind);
                   setDiceResult(null);
                 } else if (currentScreen === 'coin') {
                   setCoinMode(option.value as CoinMode);
                   setCoinResult(null);
+                } else if (currentScreen === 'players-score') {
+                  setScoreboardView(option.value === 'history' ? 'history' : 'score');
+                  game.playSlide();
                 } else {
                   const nextMode: RoundMode =
                     option.value === 'manual'
@@ -628,7 +697,7 @@ export function HomeScreen() {
             >
               <Text
                 adjustsFontSizeToFit
-                minimumFontScale={0.68}
+                minimumFontScale={0.52}
                 numberOfLines={1}
                 style={[
                   styles.optionButtonText,
@@ -647,19 +716,23 @@ export function HomeScreen() {
   function renderSettingsContent() {
     return (
       <ScrollView
+        alwaysBounceVertical
         contentContainerStyle={styles.settingsContent}
-        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator
         style={styles.settingsScroll}
       >
         <Text style={styles.sectionTitle}>Experience</Text>
-        {(['sounds', 'music', 'animations'] as const).map((key) => (
+        {(['sounds', 'music', 'haptics', 'animations'] as const).map((key) => (
           <Pressable
             key={key}
             onPress={() => handleToggleSetting(key)}
             style={styles.toggleRow}
           >
             <Text style={styles.toggleLabel}>
-              {key.charAt(0).toUpperCase() + key.slice(1)}
+              {key === 'haptics' ? 'Vibrations' : key.charAt(0).toUpperCase() + key.slice(1)}
             </Text>
             <View style={[styles.togglePill, game.settings[key] && styles.togglePillActive]}>
               <View
@@ -670,6 +743,38 @@ export function HomeScreen() {
         ))}
 
         {renderDynamicSettingsSection()}
+
+        {!isWeb && !PREMIUM_UNLOCKED ? (
+          <>
+            <Text style={styles.sectionTitle}>Premium</Text>
+            <View style={styles.premiumSettingsCard}>
+              <Text style={styles.premiumSettingsTitle}>Unlock Helper Tools</Text>
+              <Text style={styles.premiumSettingsText}>
+                Get Turn Order, Dice Roll, Quick Flip, and Scoreboard.
+              </Text>
+              <Pressable
+              onPress={() => {
+                  game.playTapHaptic();
+                  setIsSettingsOpen(false);
+                  setIsPremiumModalOpen(true);
+                }}
+                style={styles.premiumSettingsBuyButton}
+              >
+                <Text style={styles.premiumSettingsBuyText}>Unlock Premium</Text>
+              </Pressable>
+              <Pressable
+              onPress={() => {
+                  game.playTapHaptic();
+                  setIsSettingsOpen(false);
+                  setIsPremiumModalOpen(true);
+                }}
+                style={styles.restoreButton}
+              >
+                <Text style={styles.restoreButtonText}>Restore Purchase</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.sectionTitle}>Help</Text>
         {currentScreenConfig.helpLines.map((line) => (
@@ -727,7 +832,7 @@ export function HomeScreen() {
             visible={isPremiumModalOpen}
             onClose={() => setIsPremiumModalOpen(false)}
             onTouchStart={isTouchScreen ? game.handleUiTouchStart : undefined}
-            title={PREMIUM_UNLOCKED ? 'Choose screen' : 'Premium'}
+            title={PREMIUM_UNLOCKED ? 'Choose Tool' : 'Unlock Helper Tools'}
           >
             {PREMIUM_UNLOCKED ? (
               <View style={styles.optionsGrid}>
@@ -831,19 +936,23 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   settingsScroll: {
-    flexGrow: 0,
+    flexGrow: 1,
+    minHeight: 0,
   },
   settingsContent: {
     gap: 12,
-    paddingBottom: 8,
+    paddingBottom: 28,
   },
   optionButton: {
+    minHeight: 52,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 0,
     borderRadius: 18,
+    alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+    justifyContent: 'center',
   },
   optionButtonSelected: {
     backgroundColor: 'rgba(0, 228, 255, 0.16)',
@@ -853,8 +962,12 @@ const styles = StyleSheet.create({
     color: '#E6F4FF',
     fontSize: 16,
     fontWeight: '700',
+    includeFontPadding: false,
+    lineHeight: 20,
     textAlign: 'center',
+    textAlignVertical: 'center',
     flexShrink: 1,
+    width: '100%',
   },
   optionButtonTextSelected: {
     color: '#8AF4FF',
@@ -895,6 +1008,64 @@ const styles = StyleSheet.create({
   toggleKnobActive: {
     backgroundColor: '#8AF4FF',
     alignSelf: 'flex-end',
+  },
+  premiumSettingsCard: {
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 79, 216, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 79, 216, 0.24)',
+    gap: 10,
+  },
+  premiumSettingsTitle: {
+    color: '#FFF4FC',
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  premiumSettingsText: {
+    color: '#C9B9D2',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  premiumSettingsBuyButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 79, 216, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 79, 216, 0.42)',
+  },
+  premiumSettingsBuyText: {
+    color: '#FFF4FC',
+    fontSize: 14,
+    fontWeight: '900',
+    includeFontPadding: false,
+    letterSpacing: 1,
+    lineHeight: 18,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  restoreButton: {
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  restoreButtonText: {
+    color: '#BFD3E8',
+    fontSize: 13,
+    fontWeight: '800',
+    includeFontPadding: false,
+    letterSpacing: 0.8,
+    lineHeight: 17,
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
   creditText: {
     marginTop: 10,

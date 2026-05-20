@@ -18,6 +18,7 @@ type CoinModeScreenProps = {
   onPlayFlipStartSound?: () => void;
   onPlayFlipTickSound?: () => void;
   onPlayFlipTone?: (playbackRate: number) => void;
+  onPlaySlideSound?: () => void;
   onOpenPremium: () => void;
   onOpenSettings: () => void;
   result: CoinSide | null;
@@ -38,6 +39,7 @@ export function CoinModeScreen({
   onPlayFlipStartSound,
   onPlayFlipTickSound,
   onPlayFlipTone,
+  onPlaySlideSound,
   onOpenPremium,
   onOpenSettings,
   result,
@@ -66,6 +68,7 @@ export function CoinModeScreen({
         onFlipStartSound={onPlayFlipStartSound}
         onFlipTickSound={onPlayFlipTickSound}
         onFlipTone={onPlayFlipTone}
+        onSlideSound={onPlaySlideSound}
         result={result}
       />
     </View>

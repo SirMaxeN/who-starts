@@ -172,11 +172,12 @@ export function TouchModeSurface({
     return selectedOrder.slice(0, Math.max(1, orderRevealCount));
   }, [orderRevealCount, screen, selectedOrder]);
   const markerTouches = screen === 'players-order' && selectedOrder ? selectedOrder : visibleTouches;
+  const hasHeldResult = Boolean(winner || (screen === 'players-order' && selectedOrder));
   const footerHint =
-    screen === 'players-order' && selectedOrder && activeTouches.length === 0
+    hasHeldResult && activeTouches.length === 0
       ? 'Tap to reset'
       : awaitingRelease
-        ? 'Release to reset'
+        ? 'Release all fingers'
         : `${activeTouches.length} active`;
 
   return (

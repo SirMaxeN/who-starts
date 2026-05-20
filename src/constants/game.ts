@@ -17,6 +17,7 @@ export const COIN_HISTORY_STORAGE_KEY = 'whostarts.coin-history';
 export const PREMIUM_UNLOCKED = true;
 export const DEFAULT_SETTINGS: AppSettings = {
   animations: true,
+  haptics: true,
   music: true,
   sounds: true,
 };
@@ -39,6 +40,19 @@ export const TOUCH_COLORS = [
   '#FF6B3D',
   '#4D9BFF',
   '#FF5470',
+];
+
+export const SCORE_PLAYER_COLORS = [
+  '#00F5FF',
+  '#FF4FD8',
+  '#9B6BFF',
+  '#9DFF00',
+  '#FFB800',
+  '#FF6B3D',
+  '#4D9BFF',
+  '#FF365E',
+  '#32FF8F',
+  '#8EA0B8',
 ];
 
 export const BACKGROUND_ORBS: BackgroundOrb[] = [
@@ -76,7 +90,7 @@ export const COIN_OPTIONS: { label: string; value: CoinMode }[] = [
 
 export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
   coin: {
-    chipLabel: 'Coin',
+    chipLabel: 'Flip',
     helpLines: [
       'Tap the center coin to flip it.',
       'Swipe or use the mode picker to change the coin type.',
@@ -84,7 +98,7 @@ export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
       'Use it for quick decisions without leaving the app.',
     ],
     premium: true,
-    title: 'Coin',
+    title: 'Quick Flip',
   },
   dice: {
     chipLabel: 'D6',
@@ -94,7 +108,7 @@ export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
       'The latest results stay visible in a short session history.',
     ],
     premium: true,
-    title: 'Dice',
+    title: 'Dice Roll',
   },
   'first-player': {
     chipLabel: '2s',
@@ -105,7 +119,7 @@ export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
       'One finger wins. Release all fingers to begin again.',
     ],
     premium: false,
-    title: 'First Player',
+    title: 'Who Starts?',
   },
   'players-order': {
     chipLabel: 'Order',
@@ -115,7 +129,7 @@ export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
       'Release all fingers to prepare the next chain.',
     ],
     premium: true,
-    title: 'Players Order',
+    title: 'Turn Order',
   },
   'players-score': {
     chipLabel: 'Score',
@@ -126,6 +140,6 @@ export const APP_SCREENS: Record<AppScreen, ScreenConfig> = {
       'Save stores a snapshot of the current table in local history.',
     ],
     premium: true,
-    title: 'Players Score',
+    title: 'Scoreboard',
   },
 };

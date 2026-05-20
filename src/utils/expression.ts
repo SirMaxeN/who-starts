@@ -1,4 +1,4 @@
-type ParsedExpression =
+export type ParsedExpression =
   | {
       error: null;
       value: number;

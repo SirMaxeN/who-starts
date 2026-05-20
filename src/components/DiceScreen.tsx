@@ -367,7 +367,7 @@ export function DiceScreen({
           { backgroundColor: criticalFlashColor, opacity: screenFlashOpacity },
         ]}
       />
-      <Text style={styles.eyebrow}>RPG Dice Set</Text>
+      <Text style={styles.eyebrow}>Dice Roll</Text>
       <View
         onTouchEnd={(event) => {
           const touch = event.nativeEvent.changedTouches[0] ?? event.nativeEvent;
